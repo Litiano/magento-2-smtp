@@ -74,8 +74,8 @@ class Log extends AbstractModel
         TransportBuilder $transportBuilder,
         Mail $mailResource,
         Data $helper,
-        AbstractResource $resource = null,
-        AbstractDb $resourceCollection = null,
+        ?AbstractResource $resource = null,
+        ?AbstractDb $resourceCollection = null,
         array $data = []
     ) {
         parent::__construct($context, $registry, $resource, $resourceCollection, $data);

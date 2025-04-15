@@ -276,13 +276,12 @@ class Mail
      */
     public function getSymfonyTransport($storeId)
     {
-        $config = $this->smtpHelper->getSmtpConfig('', $storeId);
-
-        $host = $config['host'] ?? 'localhost';
-        $port = (int) ($config['port'] ?? 25);
+        $config     = $this->smtpHelper->getSmtpConfig('', $storeId);
+        $host       = $config['host'] ?? 'localhost';
+        $port       = (int) ($config['port'] ?? 25);
         $encryption = $config['protocol'] ?? null;
-        $username = $config['username'] ?? null;
-        $password = $this->smtpHelper->getPassword($storeId);
+        $username   = $config['username'] ?? null;
+        $password   = $this->smtpHelper->getPassword($storeId);
 
         $transport = new EsmtpTransport($host, $port, $encryption);
         if ($username && $password) {

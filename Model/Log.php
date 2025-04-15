@@ -199,8 +199,8 @@ class Log extends AbstractModel
         $from = $message->getFrom();
         if (is_array($from) && count($from)) {
             $firstFrom = reset($from);
-            $name = method_exists($firstFrom, 'getName') ? $firstFrom->getName() : '';
-            $email = method_exists($firstFrom, 'getAddress') ? $firstFrom->getAddress() : (method_exists($firstFrom, 'getEmail') ? $firstFrom->getEmail() : '');
+            $name      = method_exists($firstFrom, 'getName') ? $firstFrom->getName() : '';
+            $email     = method_exists($firstFrom, 'getAddress') ? $firstFrom->getAddress() : (method_exists($firstFrom, 'getEmail') ? $firstFrom->getEmail() : '');
             $this->setSender(trim($name . ' <' . $email . '>'));
         }
 

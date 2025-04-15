@@ -126,7 +126,7 @@ class Transport
                         }
 
                         $transport = $this->resourceMail->getSymfonyTransport($this->_storeId);
-                        $mailer = new Mailer($transport);
+                        $mailer    = new Mailer($transport);
                         $mailer->send($message);
                     } else {
                         if ($this->helper->versionCompare('2.2.8')) {
@@ -182,7 +182,7 @@ class Transport
         }
 
         $email->subject((string) $laminasMessage->getSubject());
-        $body = $laminasMessage->getBody();
+        $body    = $laminasMessage->getBody();
         $content = $body->getBody();
         $subtype = $body->getMediaSubtype();
 

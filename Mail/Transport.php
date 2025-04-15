@@ -35,6 +35,9 @@ use Mageplaza\Smtp\Model\LogFactory;
 use Psr\Log\LoggerInterface;
 use ReflectionClass;
 use Laminas\Mail\Message;
+use Symfony\Component\Mime\Email;
+use Symfony\Component\Mime\Address;
+use Symfony\Component\Mailer\Mailer;
 use Zend_Exception;
 
 /**
@@ -114,35 +117,100 @@ class Transport
             return;
         }
         $message = $this->getMessage($subject);
-        if ($this->helper->versionCompare('2.2.8')) {
-            $message = Message::fromString($message->getRawMessage())->setEncoding('utf-8');
-        }
         if (!$this->validateBlacklist($message)) {
-            $message = $this->resourceMail->processMessage($message, $this->_storeId);
             try {
                 if (!$this->resourceMail->isDeveloperMode($this->_storeId)) {
-                    if ($this->helper->versionCompare('2.3.3')) {
-                        $message->getHeaders()->removeHeader("Content-Disposition");
-                    }
-                    $transport = $this->resourceMail->getTransport($this->_storeId);
-                    $transport->send($message);
+                    if ($this->helper->versionCompare('2.4.8')) {
+                        if (!$message instanceof Email) {
+                            $message = $this->convertToSymfonyEmail($message);
+                        }
 
-                    if ($this->helper->versionCompare('2.2.8')) {
-                        $messageTmp = $this->getMessage($subject);
-                        if ($messageTmp && is_object($messageTmp)) {
-                            $body = $messageTmp->getBody();
-                            if (is_object($body) && $body->isMultiPart()) {
-                                $message->setBody($body->getPartContent("0"));
+                        $transport = $this->resourceMail->getSymfonyTransport($this->_storeId);
+                        $mailer = new Mailer($transport);
+                        $mailer->send($message);
+                    } else {
+                        if ($this->helper->versionCompare('2.2.8')) {
+                            $message = Message::fromString($message->getRawMessage())->setEncoding('utf-8');
+                        }
+                        $message = $this->resourceMail->processMessage($message, $this->_storeId);
+                        if ($this->helper->versionCompare('2.3.3')) {
+                            $message->getHeaders()->removeHeader("Content-Disposition");
+                        }
+
+                        $transport = $this->resourceMail->getTransport($this->_storeId);
+                        $transport->send($message);
+
+                        if ($this->helper->versionCompare('2.2.8')) {
+                            $messageTmp = $this->getMessage($subject);
+                            if ($messageTmp && is_object($messageTmp)) {
+                                $body = $messageTmp->getBody();
+                                if (is_object($body) && $body->isMultiPart()) {
+                                    $message->setBody($body->getPartContent("0"));
+                                }
                             }
                         }
                     }
                 }
+
                 $this->emailLog($message);
             } catch (Exception $e) {
                 $this->emailLog($message, false);
                 throw new MailException(new Phrase($e->getMessage()), $e);
             }
         }
+    }
+
+    /**
+     * @param $laminasMessage
+     * @return Email
+     */
+    protected function convertToSymfonyEmail($laminasMessage)
+    {
+        $email = new Email();
+
+        $fromList = $laminasMessage->getFrom();
+        if (is_array($fromList) && count($fromList)) {
+            $from = $fromList[0];
+            $email->from(new Address($from->getEmail(), $from->getName()));
+        }
+
+        $to = $laminasMessage->getTo();
+        if (is_array($to)) {
+            foreach ($to as $toAddress) {
+                $email->to(new Address($toAddress->getEmail(), $toAddress->getName()));
+            }
+        }
+
+        $email->subject((string) $laminasMessage->getSubject());
+        $body = $laminasMessage->getBody();
+        $content = $body->getBody();
+        $subtype = $body->getMediaSubtype();
+
+        if ($subtype === 'html') {
+            $email->html($content);
+        } else {
+            $email->text($content);
+        }
+
+        if ($laminasMessage->getCc()) {
+            foreach ($laminasMessage->getCc() as $ccAddress) {
+                $email->addCc(new Address($ccAddress->getEmail(), $ccAddress->getName()));
+            }
+        }
+
+        if ($laminasMessage->getBcc()) {
+            foreach ($laminasMessage->getBcc() as $bccAddress) {
+                $email->addBcc(new Address($bccAddress->getEmail(), $bccAddress->getName()));
+            }
+        }
+
+        if ($laminasMessage->getReplyTo()) {
+            foreach ($laminasMessage->getReplyTo() as $replyTo) {
+                $email->replyTo(new Address($replyTo->getEmail(), $replyTo->getName()));
+            }
+        }
+
+        return $email;
     }
 
     /**

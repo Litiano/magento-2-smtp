@@ -299,7 +299,12 @@ class Transport
             /** @var Log $log */
             $log = $this->logFactory->create();
             try {
-                $log->saveLog($message, $status);
+                if ($this->helper->versionCompare('2.4.8')) {
+                    $log->saveLogSymfony($message, $status);
+                } else {
+                    $log->saveLog($message, $status);
+                }
+
                 if ($status) {
                     $this->saveLogIdForAbandonedCart($log);
                 }

@@ -185,6 +185,59 @@ class Log extends AbstractModel
     }
 
     /**
+     * Save email logs magento 2.4.8 and above
+     *
+     * @param $message
+     * @param $status
+     */
+    public function saveLogSymfony($message, $status)
+    {
+        if ($message->getSubject()) {
+            $this->setSubject($message->getSubject());
+        }
+
+        $from = $message->getFrom();
+        if (is_array($from) && count($from)) {
+            $firstFrom = reset($from);
+            $name = method_exists($firstFrom, 'getName') ? $firstFrom->getName() : '';
+            $email = method_exists($firstFrom, 'getAddress') ? $firstFrom->getAddress() : (method_exists($firstFrom, 'getEmail') ? $firstFrom->getEmail() : '');
+            $this->setSender(trim($name . ' <' . $email . '>'));
+        }
+
+        $toArr = [];
+        foreach ($message->getTo() as $toAddr) {
+            $toArr[] = method_exists($toAddr, 'getAddress') ? $toAddr->getAddress() : $toAddr->getEmail();
+        }
+        $this->setRecipient(implode(',', $toArr));
+
+        $ccArr = [];
+        foreach ($message->getCc() as $ccAddr) {
+            $ccArr[] = method_exists($ccAddr, 'getAddress') ? $ccAddr->getAddress() : $ccAddr->getEmail();
+        }
+        $this->setCc(implode(',', $ccArr));
+
+        $bccArr = [];
+        foreach ($message->getBcc() as $bccAddr) {
+            $bccArr[] = method_exists($bccAddr, 'getAddress') ? $bccAddr->getAddress() : $bccAddr->getEmail();
+        }
+        $this->setBcc(implode(',', $bccArr));
+
+        $content = '';
+        $htmlBody = method_exists($message, 'getHtmlBody') ? $message->getHtmlBody() : null;
+        $textBody = method_exists($message, 'getTextBody') ? $message->getTextBody() : null;
+
+        if ($htmlBody) {
+            $content = htmlspecialchars($htmlBody);
+        } elseif ($textBody) {
+            $content = htmlspecialchars($textBody);
+        }
+
+        $this->setEmailContent($content)
+            ->setStatus($status)
+            ->save();
+    }
+
+    /**
      * @return bool
      */
     public function resendEmail()

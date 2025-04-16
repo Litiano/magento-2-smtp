@@ -821,7 +821,7 @@ class EmailMarketing extends Data
      *
      * @return string
      */
-    public function getOrderViewUrl($storeId, $orderId, $path = null)
+    public function getOrderViewUrl($storeId, $orderId, ?string $path = null)
     {
         $this->frontendUrl->setScope($storeId);
 
@@ -837,7 +837,7 @@ class EmailMarketing extends Data
      * @throws LocalizedException
      * @throws NoSuchEntityException
      */
-    public function getACEData($quote, array $address = null, $isOsc = false)
+    public function getACEData($quote, ?array $address = null, ?bool $isOsc = false)
     {
         $isActive         = (bool) $quote->getIsActive();
         $quoteCompletedAt = null;

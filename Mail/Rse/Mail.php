@@ -25,6 +25,8 @@ use Mageplaza\Smtp\Helper\Data;
 use Laminas\Mail\Message;
 use Laminas\Mail\Transport\Smtp;
 use Laminas\Mail\Transport\SmtpOptions;
+use Symfony\Component\Mailer\Transport\Smtp\EsmtpTransport;
+use Symfony\Component\Mime\Parser\MessageParser;
 use Zend_Exception;
 
 /**
@@ -266,5 +268,26 @@ class Mail
         }
 
         return $this->_emailLog[$storeId];
+    }
+
+    /**
+     * @param $storeId
+     * @return EsmtpTransport
+     */
+    public function getSymfonyTransport($storeId)
+    {
+        $config     = $this->smtpHelper->getSmtpConfig('', $storeId);
+        $host       = $config['host'] ?? 'localhost';
+        $port       = (int) ($config['port'] ?? 25);
+        $encryption = $config['protocol'] ?? null;
+        $username   = $config['username'] ?? null;
+        $password   = $this->smtpHelper->getPassword($storeId);
+        $transport  = new EsmtpTransport($host, $port, $encryption);
+        if ($username && $password) {
+            $transport->setUsername($username);
+            $transport->setPassword($password);
+        }
+
+        return $transport;
     }
 }

@@ -282,8 +282,7 @@ class Mail
         $encryption = $config['protocol'] ?? null;
         $username   = $config['username'] ?? null;
         $password   = $this->smtpHelper->getPassword($storeId);
-
-        $transport = new EsmtpTransport($host, $port, $encryption);
+        $transport  = new EsmtpTransport($host, $port, $encryption);
         if ($username && $password) {
             $transport->setUsername($username);
             $transport->setPassword($password);

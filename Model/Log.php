@@ -222,7 +222,7 @@ class Log extends AbstractModel
         }
         $this->setBcc(implode(',', $bccArr));
 
-        $content = '';
+        $content  = '';
         $htmlBody = method_exists($message, 'getHtmlBody') ? $message->getHtmlBody() : null;
         $textBody = method_exists($message, 'getTextBody') ? $message->getTextBody() : null;
 

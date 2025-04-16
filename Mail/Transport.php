@@ -38,6 +38,9 @@ use Laminas\Mail\Message;
 use Symfony\Component\Mime\Email;
 use Symfony\Component\Mime\Address;
 use Symfony\Component\Mailer\Mailer;
+use Symfony\Component\Mime\Part\DataPart;
+use Symfony\Component\Mime\Part\TextPart;
+use Symfony\Component\Mime\Part\Multipart\MixedPart;
 use Zend_Exception;
 
 /**
@@ -182,14 +185,34 @@ class Transport
         }
 
         $email->subject((string) $laminasMessage->getSubject());
-        $body    = $laminasMessage->getBody();
-        $content = $body->getBody();
-        $subtype = $body->getMediaSubtype();
+        $body = $laminasMessage->getBody();
+        if ($body instanceof TextPart) {
+            $mediaSubtype = $body->getMediaSubtype();
+            $content      = $body->getBody();
 
-        if ($subtype === 'html') {
-            $email->html($content);
+            if ($mediaSubtype === 'html') {
+                $email->html($content);
+            } else {
+                $email->text($content);
+            }
+        } elseif ($body instanceof MixedPart) {
+            foreach ($body->getParts() as $part) {
+                if ($part instanceof TextPart) {
+                    $mediaSubtype = $part->getMediaSubtype();
+                    $content      = $part->getBody();
+
+                    if ($mediaSubtype === 'html') {
+                        $email->html($content);
+                    } else {
+                        $email->text($content);
+                    }
+                }
+                if ($part instanceof DataPart) {
+                    $email->addPart($part);
+                }
+            }
         } else {
-            $email->text($content);
+            $email->text('No readable content.');
         }
 
         if ($laminasMessage->getCc()) {

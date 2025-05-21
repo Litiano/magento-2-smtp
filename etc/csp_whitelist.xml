@@ -26,6 +26,7 @@
         <policy id="script-src">
             <values>
                 <value id="avada" type="host">*.avada.io</value>
+                <value id="shopify" type="host">*.shopify.com</value>
             </values>
         </policy>
         <policy id="connect-src">

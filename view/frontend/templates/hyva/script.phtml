@@ -48,8 +48,9 @@ if ($isHaveCsp) {
         lastName: "<?=  /* @noEscape */ $customerData['lastname'] ?>"
     };
 </script>
-<?php $hyvaCsp->registerInlineScript() ?>
-<?php $hyvaCsp->registerInlineScript();?>
+<?php if ($isHaveCsp) :?>
+    <?php $hyvaCsp->registerInlineScript();?>
+<?php endif; ?>
 <!-- BEGIN AVADA EMAIL MARKETING SCRIPT-->
 <?php if ($isSuccessPage && $block->getCurrentOrder()) {
     $order        = $block->getCurrentOrder();
@@ -68,7 +69,6 @@ if ($isHaveCsp) {
             checkoutEmail: "<?=  /* @noEscape */ $email ?>"
         };
     </script>
-<?php $hyvaCsp->registerInlineScript() ?>
     <?php if ($isHaveCsp) :?>
         <?php $hyvaCsp->registerInlineScript();?>
     <?php endif; ?>
@@ -90,13 +90,11 @@ if ($isHaveCsp) {
         };
         window.AVADA_EM.template = "product";
     </script>
-<?php $hyvaCsp->registerInlineScript() ?>
     <?php if ($isHaveCsp) :?>
         <?php $hyvaCsp->registerInlineScript();?>
     <?php endif; ?>
 <?php endif; ?>
 <script data-cfasync="false" type="text/javascript">(function(b){var s=document.createElement("script");s.type="text/javascript";s.async=true;s.src=b;var x=document.getElementsByTagName("script")[0];x.parentNode.insertBefore(s,x);})("https://app.avada.io/avada-sdk.min.js");</script>
-<?php $hyvaCsp->registerInlineScript() ?>
 <?php if ($isHaveCsp) :?>
     <?php $hyvaCsp->registerInlineScript();?>
 <?php endif; ?>

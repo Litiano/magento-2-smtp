@@ -1273,6 +1273,11 @@ class EmailMarketing extends Data
         $body     = $this->_curl->getBody();
         $bodyData = self::jsonDecode($body);
 
+        $writer = new \Zend_Log_Writer_Stream(BP . '/var/log/custom.log');
+        $logger = new \Zend_Log();
+        $logger->addWriter($writer);
+        $logger->info(json_encode($bodyData));
+
         if ($isLog) {
             return $bodyData;
         }

@@ -108,8 +108,7 @@ class Log extends AbstractModel
 
             $from = $message->getFrom();
             if (count($from)) {
-                $from->rewind();
-                $this->setSender($from->current()->getName() . ' <' . $from->current()->getEmail() . '>');
+                $this->setSender($from[0]->getName() . ' <' . $from[0]->getEmail() . '>');
             }
 
             $toArr = [];

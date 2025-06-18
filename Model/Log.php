@@ -108,7 +108,15 @@ class Log extends AbstractModel
 
             $from = $message->getFrom();
             if (count($from)) {
-                $this->setSender($from[0]->getName() . ' <' . $from[0]->getEmail() . '>');
+                if (is_array($from)) {
+                    $sender = reset($from);
+                    $name   = (string) $sender->getName();
+                    $email  = $sender->getEmail();
+                    $this->setSender($name . ' <' . $email . '>');
+                } else {
+                    $from->rewind();
+                    $this->setSender($from->current()->getName() . ' <' . $from->current()->getEmail() . '>');
+                }
             }
 
             $toArr = [];
@@ -199,7 +207,8 @@ class Log extends AbstractModel
         if (is_array($from) && count($from)) {
             $firstFrom = reset($from);
             $name      = method_exists($firstFrom, 'getName') ? $firstFrom->getName() : '';
-            $email     = method_exists($firstFrom, 'getAddress') ? $firstFrom->getAddress() : (method_exists($firstFrom, 'getEmail') ? $firstFrom->getEmail() : '');
+            $email     = method_exists($firstFrom, 'getAddress') ? $firstFrom->getAddress() : (method_exists($firstFrom,
+                'getEmail') ? $firstFrom->getEmail() : '');
             $this->setSender(trim($name . ' <' . $email . '>'));
         }
 

@@ -198,9 +198,9 @@ class Log extends AbstractModel
      *
      * @param $message
      * @param $status
-     * @param null $storeId
+     * @param int $storeId
      */
-    public function saveLogSymfony($message, $status, $storeId = null)
+    public function saveLogSymfony($message, $status, $storeId = Store::DEFAULT_STORE_ID)
     {
         if ($message->getSubject()) {
             $this->setSubject($message->getSubject());
@@ -245,7 +245,7 @@ class Log extends AbstractModel
 
         $this->setEmailContent($content)
             ->setStatus($status)
-            ->setStoreId($storeId ?? Store::DEFAULT_STORE_ID)
+            ->setStoreId($storeId)
             ->save();
     }
 

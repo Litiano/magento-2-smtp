@@ -323,9 +323,9 @@ class Transport
             $log = $this->logFactory->create();
             try {
                 if ($this->helper->versionCompare('2.4.8')) {
-                    $log->saveLogSymfony($message, $status);
+                    $log->saveLogSymfony($message, $status, $this->_storeId);
                 } else {
-                    $log->saveLog($message, $status);
+                    $log->saveLog($message, $status, $this->_storeId);
                 }
 
                 if ($status) {

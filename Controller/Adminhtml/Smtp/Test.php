@@ -110,6 +110,7 @@ class Test extends Action
 
         $params = $this->getRequest()->getParams();
         if ($params && $params['to']) {
+            $storeId = $params['store'] ?? Store::DEFAULT_STORE_ID;
             $config = [
                 'type'       => 'smtp',
                 'host'       => $params['host'],
@@ -134,7 +135,7 @@ class Test extends Action
                 $config['return_path'] = $params['returnpath'];
             }
 
-            $this->mailResource->setSmtpOptions(Store::DEFAULT_STORE_ID, $config);
+            $this->mailResource->setSmtpOptions($storeId, $config);
 
             $from = $this->senderResolver->resolve(
                 isset($params['from']) ? $params['from'] : $config['username'],
@@ -143,7 +144,7 @@ class Test extends Action
 
             $this->_transportBuilder
                 ->setTemplateIdentifier('mpsmtp_test_email_template')
-                ->setTemplateOptions(['area' => Area::AREA_FRONTEND, 'store' => Store::DEFAULT_STORE_ID])
+                ->setTemplateOptions(['area' => Area::AREA_FRONTEND, 'store' => $storeId])
                 ->setTemplateVars([])
                 ->setFrom($from)
                 ->addTo($params['to']);

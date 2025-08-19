@@ -98,8 +98,9 @@ class Log extends AbstractModel
      *
      * @param $message
      * @param $status
+     * @param null $storeId
      */
-    public function saveLog($message, $status)
+    public function saveLog($message, $status, $storeId = null)
     {
         if ($this->helper->versionCompare('2.2.8')) {
             if ($message->getSubject()) {
@@ -188,6 +189,7 @@ class Log extends AbstractModel
 
         $this->setEmailContent($content)
             ->setStatus($status)
+            ->setStoreId($storeId ?? Store::DEFAULT_STORE_ID)
             ->save();
     }
 
@@ -196,8 +198,9 @@ class Log extends AbstractModel
      *
      * @param $message
      * @param $status
+     * @param int $storeId
      */
-    public function saveLogSymfony($message, $status)
+    public function saveLogSymfony($message, $status, $storeId = Store::DEFAULT_STORE_ID)
     {
         if ($message->getSubject()) {
             $this->setSubject($message->getSubject());
@@ -242,6 +245,7 @@ class Log extends AbstractModel
 
         $this->setEmailContent($content)
             ->setStatus($status)
+            ->setStoreId($storeId)
             ->save();
     }
 

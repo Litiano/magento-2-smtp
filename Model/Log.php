@@ -222,13 +222,13 @@ class Log extends AbstractModel
         $this->setRecipient(implode(',', $toArr));
 
         $ccArr = [];
-        foreach ($message->getCc() as $ccAddr) {
+        foreach ($message->getCc() ?: [] as $ccAddr) {
             $ccArr[] = method_exists($ccAddr, 'getAddress') ? $ccAddr->getAddress() : $ccAddr->getEmail();
         }
         $this->setCc(implode(',', $ccArr));
 
         $bccArr = [];
-        foreach ($message->getBcc() as $bccAddr) {
+        foreach ($message->getBcc() ?: [] as $bccAddr) {
             $bccArr[] = method_exists($bccAddr, 'getAddress') ? $bccAddr->getAddress() : $bccAddr->getEmail();
         }
         $this->setBcc(implode(',', $bccArr));

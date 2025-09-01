@@ -179,9 +179,11 @@ class Transport
 
         $to = $laminasMessage->getTo();
         if (is_array($to)) {
+            $addresses = [];
             foreach ($to as $toAddress) {
-                $email->to(new Address($toAddress->getEmail(), $toAddress->getName()));
+                $addresses[] = new Address($toAddress->getEmail(), $toAddress->getName());
             }
+            $email->to(...$addresses);
         }
 
         $email->subject((string) $laminasMessage->getSubject());

@@ -243,3 +243,4 @@ ID,ID
 Recipient,Recipient
 Cc,Cc
 Bcc,Bcc
+Port automatically set to 587 for TLS protocol,Port automatically set to 587 for TLS protocol

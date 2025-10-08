@@ -63,10 +63,12 @@
                     <label>Host</label>
                     <comment>Support Host name and IP Address</comment>
                     <frontend_model>Mageplaza\Smtp\Block\Adminhtml\System\Config\Host</frontend_model>
+                    <validate>required-entry</validate>
                 </field>
                 <field id="port" translate="label comment" type="text" sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>Port</label>
                     <comment>Default ports: 25, 465, or 587. Port 465 (SSL required), Port 587 (TLS required)</comment>
+                    <validate>required-entry validate-number validate-greater-than-zero</validate>
                 </field>
                 <field id="protocol" translate="label comment" type="select" sortOrder="35" showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>Protocol</label>
@@ -76,9 +78,11 @@
                 <field id="authentication" translate="label" type="select" sortOrder="40" showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>Authentication</label>
                     <source_model>Mageplaza\Smtp\Model\Config\Source\Authentication</source_model>
+                    <validate>required-entry</validate>
                 </field>
                 <field id="username" translate="label" type="text" sortOrder="60" showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>Username</label>
+                    <validate>validate-email</validate>
                 </field>
                 <field id="password" translate="label" type="obscure" sortOrder="70" showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>Password</label>

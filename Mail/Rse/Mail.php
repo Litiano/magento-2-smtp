@@ -21,6 +21,7 @@
 
 namespace Mageplaza\Smtp\Mail\Rse;
 
+use Magento\Framework\Message\ManagerInterface;
 use Mageplaza\Smtp\Helper\Data;
 use Laminas\Mail\Message;
 use Laminas\Mail\Transport\Smtp;
@@ -271,18 +272,24 @@ class Mail
     }
 
     /**
-     * @param $storeId
+     * @param string $storeId
+     *
      * @return EsmtpTransport
      */
     public function getSymfonyTransport($storeId)
     {
-        $config     = $this->smtpHelper->getSmtpConfig('', $storeId);
-        $host       = $config['host'] ?? 'localhost';
-        $port       = (int) ($config['port'] ?? 25);
-        $encryption = $config['protocol'] ?? null;
-        $username   = $config['username'] ?? null;
-        $password   = $this->smtpHelper->getPassword($storeId);
-        $transport  = new EsmtpTransport($host, $port, $encryption);
+        $config      = $this->smtpHelper->getSmtpConfig('', $storeId);
+        $host        = $config['host'] ?? 'localhost';
+        $port        = (int) ($config['port'] ?? 25);
+        $isEnableTls = $config['protocol'] === 'tls' ?? false;
+        $username    = $config['username'] ?? null;
+        $password    = $this->smtpHelper->getPassword($storeId);
+        if ($isEnableTls) {
+            // port must be 465 when enable tls
+            $port = 587;
+        }
+        // EsmtpTransport->$tls must be false dont pass $this->url = 'ssl://'.$this->url; in  vendor/symfony/mailer/Transport/Smtp/Stream/SocketStream.php:138
+        $transport = new EsmtpTransport($host, $port, false);
         if ($username && $password) {
             $transport->setUsername($username);
             $transport->setPassword($password);

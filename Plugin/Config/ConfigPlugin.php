@@ -82,7 +82,7 @@ class ConfigPlugin
             $protocol = $group['configuration_option']['fields']['protocol']['value'];
             $port     = &$group['configuration_option']['fields']['port']['value'];
             // Auto-set port based on protocol
-            if ($protocol === 'tls' && $port !== '587') {
+            if ($protocol === 'tls' && $port === '465') {// 465 only for SSL
                 $port = '587';
                 $subject->setGroups($group);
                 $this->messageManager->addNoticeMessage(__('Port automatically set to 587 for TLS protocol.'));

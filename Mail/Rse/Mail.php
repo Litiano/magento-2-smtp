@@ -21,7 +21,6 @@
 
 namespace Mageplaza\Smtp\Mail\Rse;
 
-use Magento\Framework\Message\ManagerInterface;
 use Mageplaza\Smtp\Helper\Data;
 use Laminas\Mail\Message;
 use Laminas\Mail\Transport\Smtp;
@@ -278,18 +277,40 @@ class Mail
      */
     public function getSymfonyTransport($storeId)
     {
-        $config      = $this->smtpHelper->getSmtpConfig('', $storeId);
-        $host        = $config['host'] ?? 'localhost';
-        $port        = (int) ($config['port'] ?? 25);
-        $isEnableTls = $config['protocol'] === 'tls' ?? false;
-        $username    = $config['username'] ?? null;
-        $password    = $this->smtpHelper->getPassword($storeId);
-        if ($isEnableTls) {
-            // port must be 465 when enable tls
-            $port = 587;
+        $config   = $this->smtpHelper->getSmtpConfig('', $storeId);
+        $host     = $config['host'] ?? 'localhost';
+        $port     = (int) ($config['port'] ?? 25);
+        $protocol = $config['protocol'] ?? null; // tls | ssl | null
+        $username = $config['username'] ?? null;
+        $password = $this->smtpHelper->getPassword($storeId);
+
+        // CRITICAL: Strip ssl:// or tls:// prefix from host - Symfony adds it automatically
+        $host = preg_replace('#^(ssl|tls)://#i', '', $host);
+
+        // Symfony $tls logic:
+        // - true  → adds ssl:// prefix (implicit SSL, for port 465 only)
+        // - false → plain connection, but EsmtpTransport auto-negotiates STARTTLS if available
+        // - null  → auto-detect based on port (465 → true, others → false)
+        
+        $tls = false; // default: plain connection with auto STARTTLS negotiation
+        
+        if ($protocol === 'ssl' || $port === 465) {
+            // Implicit SSL: requires ssl:// prefix from start (Symfony adds it when $tls=true)
+            $tls = true;
+            if ($port !== 465) {
+                $port = 465; // Force port 465 for implicit SSL
+            }
+        } elseif ($protocol === 'tls') {
+            // STARTTLS: plain connection first, then upgrade via STARTTLS command
+            // Do NOT use $tls=true here, it would add ssl:// which breaks STARTTLS
+            $tls = false; // Let Symfony negotiate STARTTLS automatically
+            if ($port === 465) {
+                $port = 587; // STARTTLS uses 587, not 465
+            }
         }
-        // EsmtpTransport->$tls must be false dont pass $this->url = 'ssl://'.$this->url; in  vendor/symfony/mailer/Transport/Smtp/Stream/SocketStream.php:138
-        $transport = new EsmtpTransport($host, $port, false);
+
+        $transport = new EsmtpTransport($host, $port, $tls);
+
         if ($username && $password) {
             $transport->setUsername($username);
             $transport->setPassword($password);

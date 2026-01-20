@@ -23,24 +23,25 @@ namespace Mageplaza\Smtp\Mail;
 
 use Closure;
 use Exception;
+use Laminas\Mail\Message;
 use Magento\Framework\Exception\MailException;
 use Magento\Framework\Mail\EmailMessage;
 use Magento\Framework\Mail\TransportInterface;
 use Magento\Framework\Phrase;
 use Magento\Framework\Registry;
 use Mageplaza\Smtp\Helper\Data;
+use Mageplaza\Smtp\Helper\GraphMailer;
 use Mageplaza\Smtp\Mail\Rse\Mail;
 use Mageplaza\Smtp\Model\Log;
 use Mageplaza\Smtp\Model\LogFactory;
 use Psr\Log\LoggerInterface;
 use ReflectionClass;
-use Laminas\Mail\Message;
-use Symfony\Component\Mime\Email;
-use Symfony\Component\Mime\Address;
 use Symfony\Component\Mailer\Mailer;
+use Symfony\Component\Mime\Address;
+use Symfony\Component\Mime\Email;
 use Symfony\Component\Mime\Part\DataPart;
-use Symfony\Component\Mime\Part\TextPart;
 use Symfony\Component\Mime\Part\Multipart\MixedPart;
+use Symfony\Component\Mime\Part\TextPart;
 use Zend_Exception;
 
 /**
@@ -80,6 +81,11 @@ class Transport
     protected $logger;
 
     /**
+     * @var GraphMailer
+     */
+    protected $graphMailer;
+
+    /**
      * Transport constructor.
      *
      * @param Mail $resourceMail
@@ -87,19 +93,22 @@ class Transport
      * @param Registry $registry
      * @param Data $helper
      * @param LoggerInterface $logger
+     * @param GraphMailer $graphMailer
      */
     public function __construct(
         Mail $resourceMail,
         LogFactory $logFactory,
         Registry $registry,
         Data $helper,
-        LoggerInterface $logger
+        LoggerInterface $logger,
+        GraphMailer $graphMailer
     ) {
         $this->resourceMail = $resourceMail;
         $this->logFactory   = $logFactory;
         $this->registry     = $registry;
         $this->helper       = $helper;
         $this->logger       = $logger;
+        $this->graphMailer  = $graphMailer;
     }
 
     /**
@@ -123,32 +132,46 @@ class Transport
         if (!$this->validateBlacklist($message)) {
             try {
                 if (!$this->resourceMail->isDeveloperMode($this->_storeId)) {
-                    if ($this->helper->versionCompare('2.4.8')) {
+                    // Check if we should use Microsoft Graph API
+                    $smtpOptions       = $this->resourceMail->getSmtpOptions($this->_storeId);
+                    $shouldUseGraphApi = $this->helper->shouldUseGraphApi($this->_storeId, $smtpOptions);
+
+                    if ($shouldUseGraphApi) {
+                        // Convert to Symfony Email if needed
                         if (!$message instanceof Email) {
                             $message = $this->convertToSymfonyEmail($message);
                         }
 
-                        $transport = $this->resourceMail->getSymfonyTransport($this->_storeId);
-                        $mailer    = new Mailer($transport);
-                        $mailer->send($message);
+                        $this->graphMailer->sendEmail($message, $this->_storeId, $smtpOptions);
                     } else {
-                        if ($this->helper->versionCompare('2.2.8')) {
-                            $message = Message::fromString($message->getRawMessage())->setEncoding('utf-8');
-                        }
-                        $message = $this->resourceMail->processMessage($message, $this->_storeId);
-                        if ($this->helper->versionCompare('2.3.3')) {
-                            $message->getHeaders()->removeHeader("Content-Disposition");
-                        }
+                        // Use SMTP transport (existing logic)
+                        if ($this->helper->versionCompare('2.4.8')) {
+                            if (!$message instanceof Email) {
+                                $message = $this->convertToSymfonyEmail($message);
+                            }
 
-                        $transport = $this->resourceMail->getTransport($this->_storeId);
-                        $transport->send($message);
+                            $transport = $this->resourceMail->getSymfonyTransport($this->_storeId);
+                            $mailer    = new Mailer($transport);
+                            $mailer->send($message);
+                        } else {
+                            if ($this->helper->versionCompare('2.2.8')) {
+                                $message = Message::fromString($message->getRawMessage())->setEncoding('utf-8');
+                            }
+                            $message = $this->resourceMail->processMessage($message, $this->_storeId);
+                            if ($this->helper->versionCompare('2.3.3')) {
+                                $message->getHeaders()->removeHeader("Content-Disposition");
+                            }
 
-                        if ($this->helper->versionCompare('2.2.8')) {
-                            $messageTmp = $this->getMessage($subject);
-                            if ($messageTmp && is_object($messageTmp)) {
-                                $body = $messageTmp->getBody();
-                                if (is_object($body) && $body->isMultiPart()) {
-                                    $message->setBody($body->getPartContent("0"));
+                            $transport = $this->resourceMail->getTransport($this->_storeId);
+                            $transport->send($message);
+
+                            if ($this->helper->versionCompare('2.2.8')) {
+                                $messageTmp = $this->getMessage($subject);
+                                if ($messageTmp && is_object($messageTmp)) {
+                                    $body = $messageTmp->getBody();
+                                    if (is_object($body) && $body->isMultiPart()) {
+                                        $message->setBody($body->getPartContent("0"));
+                                    }
                                 }
                             }
                         }
@@ -165,6 +188,7 @@ class Transport
 
     /**
      * @param $laminasMessage
+     *
      * @return Email
      */
     protected function convertToSymfonyEmail($laminasMessage)

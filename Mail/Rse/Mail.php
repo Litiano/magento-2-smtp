@@ -113,6 +113,11 @@ class Mail
             unset($options['force_sent']);
         }
 
+        if (isset($options['authentication']) && !isset($options['auth'])) {
+            $options['auth'] = $options['authentication'];
+        }
+        unset($options['authentication']);
+
         if (count($options)) {
             $this->_smtpOptions[$storeId] = $options;
         }

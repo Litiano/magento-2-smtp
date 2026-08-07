@@ -22,123 +22,96 @@ declare(strict_types=1);
 
 namespace Mageplaza\Smtp\Test\Unit\Plugin;
 
+use Exception;
 use Magento\Checkout\Model\Session as CheckoutSession;
 use Magento\Customer\Model\AccountManagement as CustomerAccountManagement;
 use Magento\Framework\DataObject;
-use Magento\Framework\TestFramework\Unit\Helper\ObjectManager;
+use Magento\Framework\TestFramework\Unit\Helper\MockCreationTrait;
 use Magento\Quote\Api\CartRepositoryInterface;
 use Magento\Quote\Model\Quote;
 use Mageplaza\Smtp\Helper\EmailMarketing;
 use Mageplaza\Smtp\Plugin\AccountManagement;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
-/**
- * Class AccountManagementTest
- * @package Mageplaza\Smtp\Test\Unit\Plugin
- */
+#[CoversClass(AccountManagement::class)]
 class AccountManagementTest extends TestCase
 {
-    /**
-     * @var CheckoutSession|MockObject
-     */
-    private CheckoutSession|MockObject $checkoutSessionMock;
+    use MockCreationTrait;
 
-    /**
-     * @var CartRepositoryInterface|MockObject
-     */
-    private CartRepositoryInterface|MockObject $cartRepositoryMock;
+    private CheckoutSession&MockObject $checkoutSession;
+    private CartRepositoryInterface&MockObject $cartRepository;
+    private EmailMarketing&MockObject $helper;
+    private CustomerAccountManagement&MockObject $subject;
 
-    /**
-     * @var EmailMarketing|MockObject
-     */
-    private EmailMarketing|MockObject $helperMock;
-
-    /**
-     * @var CustomerAccountManagement|MockObject
-     */
-    private CustomerAccountManagement|MockObject $subjectMock;
-
-    /**
-     * @var AccountManagement
-     */
     private AccountManagement $plugin;
 
-    /**
-     * @inheritdoc
-     */
     protected function setUp(): void
     {
-        $this->checkoutSessionMock = $this->getMockBuilder(CheckoutSession::class)
-            ->disableOriginalConstructor()
-            ->onlyMethods(['getQuote'])
-            ->getMock();
-        $this->cartRepositoryMock = $this->createMock(CartRepositoryInterface::class);
-        $this->helperMock         = $this->createMock(EmailMarketing::class);
-        $this->subjectMock        = $this->createMock(CustomerAccountManagement::class);
+        $this->checkoutSession = $this->createMock(CheckoutSession::class);
+        $this->cartRepository  = $this->createMock(CartRepositoryInterface::class);
+        $this->helper          = $this->createMock(EmailMarketing::class);
+        $this->subject         = $this->createMock(CustomerAccountManagement::class);
 
-        $this->plugin = new AccountManagement(
-            $this->checkoutSessionMock,
-            $this->cartRepositoryMock,
-            $this->helperMock
-        );
+        $this->plugin = new AccountManagement($this->checkoutSession, $this->cartRepository, $this->helper);
     }
 
-    /**
-     * Enable the email-marketing gate.
-     */
     private function enableGate(): void
     {
-        $this->helperMock->method('isEnableEmailMarketing')->willReturn(true);
-        $this->helperMock->method('getSecretKey')->willReturn('secret');
-        $this->helperMock->method('getAppID')->willReturn('app');
+        $this->helper->method('isEnableEmailMarketing')->willReturn(true);
+        $this->helper->method('getSecretKey')->willReturn('secret');
+        $this->helper->method('getAppID')->willReturn('app');
     }
 
-    /**
-     * The original result is always returned unchanged.
-     */
-    public function testAfterIsEmailAvailableReturnsResultWhenDisabled(): void
+    public function testAfterIsEmailAvailableReturnsResultWhenGuardFalse(): void
     {
-        $this->helperMock->method('isEnableEmailMarketing')->willReturn(false);
-        $this->cartRepositoryMock->expects($this->never())->method('get');
+        $this->helper->method('isEnableEmailMarketing')->willReturn(false);
+        $this->cartRepository->expects($this->never())->method('get');
 
-        $result = $this->plugin->afterIsEmailAvailable($this->subjectMock, true, 'a@b.com');
+        $result = $this->plugin->afterIsEmailAvailable($this->subject, true, 'a@b.com');
 
         $this->assertTrue($result);
     }
 
-    /**
-     * With an active cart, the customer email is stored on the quote and saved.
-     */
-    public function testAfterIsEmailAvailableUpdatesQuoteEmail(): void
+    public function testAfterIsEmailAvailableReturnsResultWhenCartIdMissing(): void
     {
         $this->enableGate();
+        $this->checkoutSession->method('getQuote')->willReturn(new DataObject());
+        $this->cartRepository->expects($this->never())->method('get');
 
-        $sessionQuote = new DataObject(['id' => 42]);
-        $this->checkoutSessionMock->method('getQuote')->willReturn($sessionQuote);
+        $result = $this->plugin->afterIsEmailAvailable($this->subject, true, 'a@b.com');
 
-        // A real Quote (instanceof CartInterface) so save()'s type hint is satisfied.
-        /** @var Quote $quote */
-        $quote = (new ObjectManager($this))->getObject(Quote::class);
-        $this->cartRepositoryMock->expects($this->once())->method('get')->with(42)->willReturn($quote);
-        $this->cartRepositoryMock->expects($this->once())->method('save')->with($quote);
-
-        $result = $this->plugin->afterIsEmailAvailable($this->subjectMock, false, 'buyer@example.com');
-
-        $this->assertFalse($result);
-        $this->assertSame('buyer@example.com', $quote->getData('customer_email'));
+        $this->assertTrue($result);
     }
 
-    /**
-     * Without an active cart id, nothing is loaded or saved.
-     */
-    public function testAfterIsEmailAvailableSkipsWithoutCartId(): void
+    public function testAfterIsEmailAvailableSavesQuoteEmailWhenCartPresent(): void
     {
         $this->enableGate();
-        $this->checkoutSessionMock->method('getQuote')->willReturn(new DataObject());
-        $this->cartRepositoryMock->expects($this->never())->method('get');
+        $this->checkoutSession->method('getQuote')->willReturn(new DataObject(['id' => 42]));
 
-        $result = $this->plugin->afterIsEmailAvailable($this->subjectMock, true, 'a@b.com');
+        // setCustomerEmail() is magic on Quote (@method docblock only, no declared implementation
+        // — vendor/magento/module-quote/Model/Quote.php:55) — needs createPartialMockWithReflection.
+        $quote = $this->createPartialMockWithReflection(Quote::class, ['setCustomerEmail']);
+        $this->cartRepository->expects($this->once())->method('get')->with(42)->willReturn($quote);
+        $quote->expects($this->once())->method('setCustomerEmail')->with('buyer@example.com');
+        $this->cartRepository->expects($this->once())->method('save')->with($quote);
+
+        $result = $this->plugin->afterIsEmailAvailable($this->subject, false, 'buyer@example.com');
+
+        $this->assertFalse($result);
+    }
+
+    public function testAfterIsEmailAvailableReturnsResultWhenSaveThrows(): void
+    {
+        $this->enableGate();
+        $this->checkoutSession->method('getQuote')->willReturn(new DataObject(['id' => 42]));
+
+        $quote = $this->createPartialMockWithReflection(Quote::class, ['setCustomerEmail']);
+        $this->cartRepository->method('get')->with(42)->willReturn($quote);
+        $this->cartRepository->method('save')->with($quote)->willThrowException(new Exception('db down'));
+
+        $result = $this->plugin->afterIsEmailAvailable($this->subject, true, 'buyer@example.com');
 
         $this->assertTrue($result);
     }

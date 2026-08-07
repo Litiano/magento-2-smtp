@@ -22,114 +22,109 @@ declare(strict_types=1);
 
 namespace Mageplaza\Smtp\Test\Unit\Ui\Component\Listing\Column;
 
-use Magento\Framework\TestFramework\Unit\Helper\ObjectManager;
+use Magento\Framework\TestFramework\Unit\Helper\MockCreationTrait;
 use Magento\Framework\UrlInterface;
+use Magento\Framework\View\Element\UiComponent\ContextInterface;
+use Magento\Framework\View\Element\UiComponentFactory;
 use Magento\Quote\Model\Quote;
 use Magento\Quote\Model\QuoteFactory;
 use Mageplaza\Smtp\Helper\EmailMarketing;
 use Mageplaza\Smtp\Ui\Component\Listing\Column\CustomerName;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
-/**
- * Class CustomerNameTest
- * @package Mageplaza\Smtp\Test\Unit\Ui\Component\Listing\Column
- */
+#[CoversClass(CustomerName::class)]
 class CustomerNameTest extends TestCase
 {
-    /**
-     * @var UrlInterface|MockObject
-     */
-    private UrlInterface|MockObject $urlBuilderMock;
+    use MockCreationTrait;
 
-    /**
-     * @var QuoteFactory|MockObject
-     */
-    private QuoteFactory|MockObject $quoteFactoryMock;
+    private ContextInterface&MockObject $context;
+    private UiComponentFactory&MockObject $uiComponentFactory;
+    private UrlInterface&MockObject $urlBuilder;
+    private QuoteFactory&MockObject $quoteFactory;
+    private EmailMarketing&MockObject $helper;
 
-    /**
-     * @var EmailMarketing|MockObject
-     */
-    private EmailMarketing|MockObject $helperMock;
-
-    /**
-     * @var CustomerName
-     */
-    private CustomerName $column;
-
-    /**
-     * @inheritdoc
-     */
     protected function setUp(): void
     {
-        $this->urlBuilderMock   = $this->createMock(UrlInterface::class);
-        $this->quoteFactoryMock = $this->getMockBuilder(QuoteFactory::class)
+        $this->context = $this->createMock(ContextInterface::class);
+        $this->uiComponentFactory = $this->createMock(UiComponentFactory::class);
+        $this->urlBuilder = $this->createMock(UrlInterface::class);
+        $this->quoteFactory = $this->getMockBuilder(QuoteFactory::class)
             ->disableOriginalConstructor()
             ->onlyMethods(['create'])
             ->getMock();
-        $this->helperMock = $this->createMock(EmailMarketing::class);
-
-        $this->column = (new ObjectManager($this))->getObject(CustomerName::class, [
-            'urlBuilder'           => $this->urlBuilderMock,
-            'quoteFactory'         => $this->quoteFactoryMock,
-            'helperEmailMarketing' => $this->helperMock,
-            'data'                 => ['name' => 'customer_name'],
-        ]);
+        $this->helper = $this->createMock(EmailMarketing::class);
     }
 
-    /**
-     * Stub QuoteFactory so create()->load() yields a real Quote carrying $data.
-     *
-     * @param array $data
-     */
-    private function stubQuoteLoad(array $data): void
+    private function createSut(): CustomerName
     {
-        /** @var Quote $quote */
-        $quote  = (new ObjectManager($this))->getObject(Quote::class);
-        $quote->setData($data);
+        return new CustomerName(
+            $this->context,
+            $this->uiComponentFactory,
+            $this->urlBuilder,
+            $this->quoteFactory,
+            $this->helper,
+            [],
+            ['name' => 'customer_name']
+        );
+    }
+
+    // getCustomerId() is magic on Quote (only @method-documented — vendor/magento/module-quote/Model/Quote.php:51).
+    // Quote's real constructor chain (AbstractModel::_construct()/_init()) touches ObjectManager::getInstance()
+    // internally even with every ctor arg mocked, which isn't bootstrapped in the unit test framework —
+    // createPartialMockWithReflection bypasses the constructor entirely and still allows stubbing the magic getter.
+    private function stubQuoteLoad(int $quoteId, ?int $customerId): Quote&MockObject
+    {
+        $quote = $this->createPartialMockWithReflection(Quote::class, ['getCustomerId']);
+        $quote->method('getCustomerId')->willReturn($customerId);
 
         $loader = $this->getMockBuilder(Quote::class)
             ->disableOriginalConstructor()
             ->onlyMethods(['load'])
             ->getMock();
-        $loader->method('load')->willReturn($quote);
-        $this->quoteFactoryMock->method('create')->willReturn($loader);
+        $loader->expects($this->once())->method('load')->with($quoteId)->willReturn($quote);
+
+        $this->quoteFactory->method('create')->willReturn($loader);
+
+        return $quote;
     }
 
-    /**
-     * A registered customer name is rendered as an admin edit link.
-     */
-    public function testPrepareDataSourceLinksRegisteredCustomer(): void
+    public function testPrepareDataSourceReturnsUnchangedWhenNoItemsKey(): void
     {
-        $this->stubQuoteLoad(['customer_id' => 3]);
-        $this->helperMock->method('getCustomerName')->willReturn('Jane Doe');
-        $this->urlBuilderMock->method('getUrl')->willReturn('http://shop/customer/index/edit/id/3');
+        $dataSource = [];
 
-        $dataSource = [
-            'data' => ['items' => [['entity_id' => 11, 'customer_id' => 3]]],
-        ];
-
-        $result = $this->column->prepareDataSource($dataSource);
-        $value  = $result['data']['items'][0]['customer_name'];
-
-        $this->assertStringContainsString('Jane Doe', $value);
-        $this->assertStringContainsString('<a href="http://shop/customer/index/edit/id/3"', $value);
+        $this->assertSame($dataSource, $this->createSut()->prepareDataSource($dataSource));
     }
 
-    /**
-     * A guest customer name is rendered as plain text (no link).
-     */
-    public function testPrepareDataSourceRendersGuestAsPlainText(): void
+    public function testPrepareDataSourceWrapsNameInEditLinkForRegisteredCustomer(): void
     {
-        $this->stubQuoteLoad([]);
-        $this->helperMock->method('getCustomerName')->willReturn('Guest Buyer');
-        $this->urlBuilderMock->expects($this->never())->method('getUrl');
+        $this->stubQuoteLoad(1, 9);
+        $this->helper->method('getCustomerName')->willReturn('John Doe');
+        $this->urlBuilder->expects($this->once())
+            ->method('getUrl')
+            ->with('customer/index/edit', ['id' => 9])
+            ->willReturn('http://shop/customer/index/edit/id/9');
 
-        $dataSource = [
-            'data' => ['items' => [['entity_id' => 12, 'customer_id' => null]]],
-        ];
+        $dataSource = ['data' => ['items' => [['entity_id' => 1, 'customer_id' => 9]]]];
 
-        $result = $this->column->prepareDataSource($dataSource);
+        $result = $this->createSut()->prepareDataSource($dataSource);
+
+        $this->assertSame(
+            '<a href="http://shop/customer/index/edit/id/9" target="_blank">John Doe</a>',
+            $result['data']['items'][0]['customer_name']
+        );
+    }
+
+    public function testPrepareDataSourceRendersPlainTextForGuestQuote(): void
+    {
+        $this->stubQuoteLoad(2, null);
+        $this->helper->method('getCustomerName')->willReturn('Guest Buyer');
+        $this->urlBuilder->expects($this->never())->method('getUrl');
+
+        $dataSource = ['data' => ['items' => [['entity_id' => 2, 'customer_id' => null]]]];
+
+        $result = $this->createSut()->prepareDataSource($dataSource);
 
         $this->assertSame('Guest Buyer', $result['data']['items'][0]['customer_name']);
     }

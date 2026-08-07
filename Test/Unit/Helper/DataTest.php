@@ -24,25 +24,23 @@ namespace Mageplaza\Smtp\Test\Unit\Helper;
 
 use Magento\Framework\App\CacheInterface;
 use Magento\Framework\App\Request\Http;
+use Magento\Framework\Encryption\EncryptorInterface;
 use Magento\Framework\Exception\LocalizedException;
+use Magento\Store\Api\Data\StoreInterface;
+use Magento\Store\Model\ScopeInterface;
+use Magento\Store\Model\StoreManagerInterface;
+use Magento\Store\Model\Website;
 use Mageplaza\Smtp\Helper\Data;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use ReflectionProperty;
 
-/**
- * Class DataTest
- * @package Mageplaza\Smtp\Test\Unit\Helper
- */
+#[CoversClass(Data::class)]
 class DataTest extends TestCase
 {
-    /**
-     * Build a Data helper without invoking its heavy constructor.
-     *
-     * @param array $mockedMethods
-     *
-     * @return Data|MockObject
-     */
-    private function createHelper(array $mockedMethods = []): Data
+    // Skips the heavy AbstractHelper/AbstractData constructor chain.
+    private function createHelper(array $mockedMethods = []): Data&MockObject
     {
         return $this->getMockBuilder(Data::class)
             ->disableOriginalConstructor()
@@ -50,36 +48,290 @@ class DataTest extends TestCase
             ->getMock();
     }
 
-    /**
-     * Inject a protected/inherited property value via reflection.
-     *
-     * @param object $object
-     * @param string $property
-     * @param mixed  $value
-     */
-    private function setProperty(object $object, string $property, $value): void
+    // Property is protected/inherited from AbstractHelper/AbstractData — no public setter.
+    private function setProperty(object $object, string $property, mixed $value): void
     {
-        $ref = new \ReflectionProperty(Data::class, $property);
+        $ref = new ReflectionProperty(Data::class, $property);
         $ref->setAccessible(true);
         $ref->setValue($object, $value);
     }
 
-    /**
-     * OAuth2 authentication selects the Graph API path.
-     */
-    public function testShouldUseGraphApiDetectsOauth2(): void
+
+    public function testGetSmtpConfigBuildsPath(): void
+    {
+        $helper = $this->createHelper(['getModuleConfig']);
+        $helper->expects($this->once())
+            ->method('getModuleConfig')
+            ->with('configuration_option/password', null)
+            ->willReturn('encrypted');
+
+        $this->assertSame('encrypted', $helper->getSmtpConfig('password'));
+    }
+
+    public function testGetSmtpConfigWithEmptyCodeOmitsSlash(): void
+    {
+        $helper = $this->createHelper(['getModuleConfig']);
+        $helper->expects($this->once())
+            ->method('getModuleConfig')
+            ->with('configuration_option', null)
+            ->willReturn(['host' => 'smtp.example.com']);
+
+        $this->assertSame(['host' => 'smtp.example.com'], $helper->getSmtpConfig());
+    }
+
+
+    public function testGetDeveloperConfigBuildsPath(): void
+    {
+        $helper = $this->createHelper(['getModuleConfig']);
+        $helper->expects($this->once())
+            ->method('getModuleConfig')
+            ->with('developer/debug', 5)
+            ->willReturn('1');
+
+        $this->assertSame('1', $helper->getDeveloperConfig('debug', 5));
+    }
+
+
+    public function testGetPasswordUsesProvidedStoreId(): void
+    {
+        $helper = $this->createHelper(['getSmtpConfig', 'getObject']);
+        $helper->expects($this->once())
+            ->method('getSmtpConfig')
+            ->with('password', 1)
+            ->willReturn('encrypted-pw');
+
+        $encryptor = $this->createMock(EncryptorInterface::class);
+        $encryptor->method('decrypt')->with('encrypted-pw')->willReturn('plain-pw');
+        $helper->method('getObject')->with(EncryptorInterface::class)->willReturn($encryptor);
+
+        $this->assertSame('plain-pw', $helper->getPassword(1));
+    }
+
+    public function testGetPasswordFallsBackToRequestStoreParam(): void
+    {
+        $helper = $this->createHelper(['getSmtpConfig', 'getObject']);
+
+        // getParam() has a defaulted 2nd arg; PHPUnit records the call as ['store', null].
+        $request = $this->createMock(Http::class);
+        $request->method('getParam')->with('store', null)->willReturn(2);
+        $this->setProperty($helper, '_request', $request);
+
+        $helper->expects($this->once())
+            ->method('getSmtpConfig')
+            ->with('password', 2)
+            ->willReturn('enc');
+
+        $encryptor = $this->createMock(EncryptorInterface::class);
+        $encryptor->method('decrypt')->willReturn('dec');
+        $helper->method('getObject')->willReturn($encryptor);
+
+        $this->assertSame('dec', $helper->getPassword());
+    }
+
+    public function testGetPasswordUsesWebsiteScopeWhenNoStoreParam(): void
+    {
+        $helper = $this->createHelper(['getConfigValue', 'getObject']);
+
+        $request = $this->createMock(Http::class);
+        $request->method('getParam')->willReturnMap([
+            ['store', null, null],
+            ['website', null, 'base'],
+        ]);
+        $this->setProperty($helper, '_request', $request);
+
+        $helper->expects($this->once())
+            ->method('getConfigValue')
+            ->with('smtp/configuration_option/password', 'base', ScopeInterface::SCOPE_WEBSITE)
+            ->willReturn('enc-web');
+
+        $encryptor = $this->createMock(EncryptorInterface::class);
+        $encryptor->method('decrypt')->willReturn('dec-web');
+        $helper->method('getObject')->willReturn($encryptor);
+
+        $this->assertSame('dec-web', $helper->getPassword());
+    }
+
+    public function testGetPasswordFallsBackToSmtpConfigWhenNoStoreOrWebsiteParam(): void
+    {
+        $helper = $this->createHelper(['getSmtpConfig', 'getObject']);
+
+        $request = $this->createMock(Http::class);
+        $request->method('getParam')->willReturnMap([
+            ['store', null, null],
+            ['website', null, null],
+        ]);
+        $this->setProperty($helper, '_request', $request);
+
+        $helper->expects($this->once())
+            ->method('getSmtpConfig')
+            ->with('password', null)
+            ->willReturn('enc-default');
+
+        $encryptor = $this->createMock(EncryptorInterface::class);
+        $encryptor->method('decrypt')->willReturn('dec-default');
+        $helper->method('getObject')->willReturn($encryptor);
+
+        $this->assertSame('dec-default', $helper->getPassword());
+    }
+
+    public function testGetPasswordReturnsRawValueWhenDecryptDisabled(): void
+    {
+        $helper = $this->createHelper(['getSmtpConfig', 'getObject']);
+        $helper->method('getSmtpConfig')->with('password', 5)->willReturn('raw-pw');
+        $helper->expects($this->never())->method('getObject');
+
+        $this->assertSame('raw-pw', $helper->getPassword(5, false));
+    }
+
+
+    public function testGetScopeIdUsesStoreParamWhenPresent(): void
     {
         $helper = $this->createHelper();
 
-        $this->assertTrue($helper->shouldUseGraphApi(null, ['authentication' => 'oauth2']));
-        $this->assertTrue($helper->shouldUseGraphApi(null, ['auth' => 'oauth2']));
-        $this->assertFalse($helper->shouldUseGraphApi(null, ['authentication' => 'login']));
-        $this->assertFalse($helper->shouldUseGraphApi(null, ['authentication' => '']));
+        $request = $this->createMock(Http::class);
+        $request->method('getParam')->willReturnMap([
+            [ScopeInterface::SCOPE_STORE, null, 3],
+            [ScopeInterface::SCOPE_WEBSITE, null, null],
+        ]);
+        $this->setProperty($helper, '_request', $request);
+
+        $storeManager = $this->createMock(StoreManagerInterface::class);
+        $storeManager->expects($this->never())->method('getStore');
+        $this->setProperty($helper, 'storeManager', $storeManager);
+
+        $this->assertSame(3, $helper->getScopeId());
     }
 
-    /**
-     * A non-OAuth2 configuration yields no access token.
-     */
+    public function testGetScopeIdFallsBackToCurrentStore(): void
+    {
+        $helper = $this->createHelper();
+
+        $request = $this->createMock(Http::class);
+        $request->method('getParam')->willReturnMap([
+            [ScopeInterface::SCOPE_STORE, null, null],
+            [ScopeInterface::SCOPE_WEBSITE, null, null],
+        ]);
+        $this->setProperty($helper, '_request', $request);
+
+        $store = $this->createMock(StoreInterface::class);
+        $store->method('getId')->willReturn(7);
+        $storeManager = $this->createMock(StoreManagerInterface::class);
+        $storeManager->method('getStore')->willReturn($store);
+        $this->setProperty($helper, 'storeManager', $storeManager);
+
+        $this->assertSame(7, $helper->getScopeId());
+    }
+
+    public function testGetScopeIdUsesWebsiteDefaultStoreWhenWebsiteParamPresent(): void
+    {
+        $helper = $this->createHelper();
+
+        $request = $this->createMock(Http::class);
+        $request->method('getParam')->willReturnMap([
+            [ScopeInterface::SCOPE_STORE, null, null],
+            [ScopeInterface::SCOPE_WEBSITE, null, 'base'],
+        ]);
+        $this->setProperty($helper, '_request', $request);
+
+        // getDefaultStore() is declared on the concrete Website model, not WebsiteInterface.
+        $fallbackStore = $this->createMock(StoreInterface::class);
+        $fallbackStore->method('getId')->willReturn(1);
+        $defaultStore = $this->createMock(StoreInterface::class);
+        $defaultStore->method('getId')->willReturn(9);
+        $website = $this->createMock(Website::class);
+        $website->method('getDefaultStore')->willReturn($defaultStore);
+
+        $storeManager = $this->createMock(StoreManagerInterface::class);
+        $storeManager->method('getStore')->willReturn($fallbackStore);
+        $storeManager->method('getWebsite')->with('base')->willReturn($website);
+        $this->setProperty($helper, 'storeManager', $storeManager);
+
+        $this->assertSame(9, $helper->getScopeId());
+    }
+
+
+    public function testGetBlacklistDelegatesToConfigGeneral(): void
+    {
+        $helper = $this->createHelper(['getConfigGeneral']);
+        $helper->expects($this->once())
+            ->method('getConfigGeneral')
+            ->with('blacklist', 3)
+            ->willReturn('/spam\.com/');
+
+        $this->assertSame('/spam\.com/', $helper->getBlacklist(3));
+    }
+
+
+    public function testIsTestEmail(): void
+    {
+        $request = $this->createMock(Http::class);
+        $request->method('getFullActionName')->willReturn('adminhtml_smtp_test');
+
+        $helper = $this->createHelper();
+        $this->setProperty($helper, '_request', $request);
+
+        $this->assertTrue($helper->isTestEmail());
+    }
+
+    public function testIsTestEmailFalseForOtherActions(): void
+    {
+        $request = $this->createMock(Http::class);
+        $request->method('getFullActionName')->willReturn('checkout_index_index');
+
+        $helper = $this->createHelper();
+        $this->setProperty($helper, '_request', $request);
+
+        $this->assertFalse($helper->isTestEmail());
+    }
+
+
+    public function testGetEmailMarketingConfigWithCodeAppendsSegment(): void
+    {
+        $helper = $this->createHelper(['getConfigValue']);
+        $helper->expects($this->once())
+            ->method('getConfigValue')
+            ->with('email_marketing/general/enabled', 2)
+            ->willReturn('1');
+
+        $this->assertSame('1', $helper->getEmailMarketingConfig('enabled', 2));
+    }
+
+    public function testGetEmailMarketingConfigWithEmptyCodeOmitsSegment(): void
+    {
+        $helper = $this->createHelper(['getConfigValue']);
+        $helper->expects($this->once())
+            ->method('getConfigValue')
+            ->with('email_marketing/general', null)
+            ->willReturn(['enabled' => '1']);
+
+        $this->assertSame(['enabled' => '1'], $helper->getEmailMarketingConfig());
+    }
+
+
+    public function testIsEnableEmailMarketingDelegatesToEmailMarketingConfig(): void
+    {
+        $helper = $this->createHelper(['getEmailMarketingConfig']);
+        $helper->expects($this->once())
+            ->method('getEmailMarketingConfig')
+            ->with('enabled', 4)
+            ->willReturn(true);
+
+        $this->assertTrue($helper->isEnableEmailMarketing(4));
+    }
+
+
+    public function testGetOauthConfigBuildsPath(): void
+    {
+        $helper = $this->createHelper(['getModuleConfig']);
+        $helper->expects($this->once())
+            ->method('getModuleConfig')
+            ->with('configuration_option/oauth_client_id', 6)
+            ->willReturn('client-id');
+
+        $this->assertSame('client-id', $helper->getOauthConfig('oauth_client_id', 6));
+    }
+
+
     public function testGetOauthAccessTokenReturnsNullWhenNotOauth2(): void
     {
         $helper = $this->createHelper();
@@ -87,9 +339,6 @@ class DataTest extends TestCase
         $this->assertNull($helper->getOauthAccessToken(1, ['authentication' => 'plain']));
     }
 
-    /**
-     * Missing OAuth2 credentials raise a descriptive exception.
-     */
     public function testGetOauthAccessTokenThrowsOnMissingCredentials(): void
     {
         $helper = $this->createHelper();
@@ -104,9 +353,6 @@ class DataTest extends TestCase
         ]);
     }
 
-    /**
-     * A cached token short-circuits the HTTP round trip.
-     */
     public function testGetOauthAccessTokenReturnsCachedToken(): void
     {
         $helper = $this->createHelper();
@@ -125,59 +371,25 @@ class DataTest extends TestCase
         $this->assertSame('cached-token', $token);
     }
 
-    /**
-     * getSmtpConfig builds the "<group>/<code>" path and delegates.
-     */
-    public function testGetSmtpConfigBuildsPath(): void
+
+    public function testShouldUseGraphApiDetectsOauth2(): void
     {
-        $helper = $this->createHelper(['getModuleConfig']);
-        $helper->expects($this->once())
-            ->method('getModuleConfig')
-            ->with('configuration_option/password', null)
-            ->willReturn('encrypted');
-
-        $this->assertSame('encrypted', $helper->getSmtpConfig('password'));
-    }
-
-    /**
-     * getDeveloperConfig builds the developer group path and delegates.
-     */
-    public function testGetDeveloperConfigBuildsPath(): void
-    {
-        $helper = $this->createHelper(['getModuleConfig']);
-        $helper->expects($this->once())
-            ->method('getModuleConfig')
-            ->with('developer/debug', 5)
-            ->willReturn('1');
-
-        $this->assertSame('1', $helper->getDeveloperConfig('debug', 5));
-    }
-
-    /**
-     * isTestEmail only matches the admin test-email action.
-     */
-    public function testIsTestEmail(): void
-    {
-        $request = $this->createMock(Http::class);
-        $request->method('getFullActionName')->willReturn('adminhtml_smtp_test');
-
         $helper = $this->createHelper();
-        $this->setProperty($helper, '_request', $request);
 
-        $this->assertTrue($helper->isTestEmail());
+        $this->assertTrue($helper->shouldUseGraphApi(null, ['authentication' => 'oauth2']));
+        $this->assertTrue($helper->shouldUseGraphApi(null, ['auth' => 'oauth2']));
+        $this->assertFalse($helper->shouldUseGraphApi(null, ['authentication' => 'login']));
+        $this->assertFalse($helper->shouldUseGraphApi(null, ['authentication' => '']));
     }
 
-    /**
-     * A non-test action is not treated as a test email.
-     */
-    public function testIsTestEmailFalseForOtherActions(): void
+    public function testShouldUseGraphApiFallsBackToGetSmtpConfigWhenNoOverride(): void
     {
-        $request = $this->createMock(Http::class);
-        $request->method('getFullActionName')->willReturn('checkout_index_index');
+        $helper = $this->createHelper(['getSmtpConfig']);
+        $helper->expects($this->once())
+            ->method('getSmtpConfig')
+            ->with('', 8)
+            ->willReturn(['authentication' => 'oauth2']);
 
-        $helper = $this->createHelper();
-        $this->setProperty($helper, '_request', $request);
-
-        $this->assertFalse($helper->isTestEmail());
+        $this->assertTrue($helper->shouldUseGraphApi(8));
     }
 }

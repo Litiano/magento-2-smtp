@@ -102,9 +102,6 @@ class TransportTest extends TestCase
         );
     }
 
-    /**
-     * @param string[] $emails
-     */
     private function createMessage(
         ?AbstractPart $body = null,
         array $emails = ['to@example.com'],
@@ -148,9 +145,6 @@ class TransportTest extends TestCase
         };
     }
 
-    /**
-     * Runs the SMTP branch and returns whatever reached Symfony's transport.
-     */
     private function sendViaSmtp(EmailMessage $message, ?Transport $sut = null): ?RawMessage
     {
         $this->helper->method('shouldUseGraphApi')->willReturn(false);
@@ -177,9 +171,7 @@ class TransportTest extends TestCase
         return $captured;
     }
 
-    /**
-     * Runs the Graph branch, which is the path that still converts, and returns the built Email.
-     */
+    // Graph is the only path that still converts post-M2X-63 (SMTP is now a pass-through).
     private function convertViaGraph(?AbstractPart $body, ?EmailMessage $message = null): Email
     {
         $this->helper->method('shouldUseGraphApi')->willReturn(true);
@@ -212,7 +204,6 @@ class TransportTest extends TestCase
         );
     }
 
-    // ---------------------------------------------------------------- Group A
     // SMTP path: the message object must reach Symfony untouched.
 
     public function testAroundSendMessagePassesSymfonyMessageThroughUnchanged(): void
@@ -344,7 +335,6 @@ class TransportTest extends TestCase
         $this->assertSame('legacy body', $captured->getTextBody());
     }
 
-    // ---------------------------------------------------------------- Group B
     // Conversion (Graph + log paths) must survive every MIME shape.
 
     public function testConvertPlainTextRootIsUnchanged(): void
@@ -539,7 +529,6 @@ class TransportTest extends TestCase
         $this->assertSame('No readable content.', $email->getTextBody());
     }
 
-    // ---------------------------------------------------------------- Group C
     // Branch selection, error handling and the header/address riders.
 
     public function testAroundSendMessageCallsProceedWhenModuleDisabled(): void
@@ -742,7 +731,6 @@ class TransportTest extends TestCase
         ];
     }
 
-    // ---------------------------------------------------------------- Group D
     // Pins on the Symfony hierarchy the fix depends on.
 
     public function testDataPartIsSubclassOfTextPart(): void

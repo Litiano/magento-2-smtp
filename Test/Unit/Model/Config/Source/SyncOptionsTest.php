@@ -23,57 +23,28 @@ declare(strict_types=1);
 namespace Mageplaza\Smtp\Test\Unit\Model\Config\Source;
 
 use Mageplaza\Smtp\Model\Config\Source\SyncOptions;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 
-/**
- * Class SyncOptionsTest
- * @package Mageplaza\Smtp\Test\Unit\Model\Config\Source
- */
+#[CoversClass(SyncOptions::class)]
 class SyncOptionsTest extends TestCase
 {
-    /**
-     * @var SyncOptions
-     */
-    private SyncOptions $model;
+    private SyncOptions $subject;
 
-    /**
-     * @inheritdoc
-     */
     protected function setUp(): void
     {
-        $this->model = new SyncOptions();
+        $this->subject = new SyncOptions();
     }
 
-    /**
-     * Constants back the option values.
-     */
-    public function testConstants(): void
+    public function testToOptionArrayReturnsAllAndNotSyncOptions(): void
     {
-        $this->assertSame('all', SyncOptions::ALL);
-        $this->assertSame('not_sync', SyncOptions::NOT_SYNC);
-    }
-
-    /**
-     * Every option must expose a value and a label key.
-     */
-    public function testToOptionArrayFormat(): void
-    {
-        $result = $this->model->toOptionArray();
-
-        $this->assertNotEmpty($result);
-        foreach ($result as $option) {
-            $this->assertArrayHasKey('value', $option);
-            $this->assertArrayHasKey('label', $option);
-        }
-    }
-
-    /**
-     * All / New Object Only options, in order.
-     */
-    public function testToOptionArrayValues(): void
-    {
-        $values = array_column($this->model->toOptionArray(), 'value');
-
-        $this->assertSame([SyncOptions::ALL, SyncOptions::NOT_SYNC], $values);
+        // assertEquals: nested __() Phrase objects aren't === identical across instances.
+        $this->assertEquals(
+            [
+                ['value' => SyncOptions::ALL, 'label' => __('All')],
+                ['value' => SyncOptions::NOT_SYNC, 'label' => __('New Object Only')],
+            ],
+            $this->subject->toOptionArray()
+        );
     }
 }

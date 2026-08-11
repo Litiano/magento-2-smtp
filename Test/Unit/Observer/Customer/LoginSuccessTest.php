@@ -22,97 +22,70 @@ declare(strict_types=1);
 
 namespace Mageplaza\Smtp\Test\Unit\Observer\Customer;
 
+use Exception;
 use Magento\Framework\Event\Observer;
 use Magento\PageCache\Model\Cache\Type;
 use Mageplaza\Smtp\Helper\Data;
 use Mageplaza\Smtp\Helper\EmailMarketing;
 use Mageplaza\Smtp\Observer\Customer\LoginSuccess;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Zend_Cache;
 
-/**
- * Class LoginSuccessTest
- * @package Mageplaza\Smtp\Test\Unit\Observer\Customer
- */
+#[CoversClass(LoginSuccess::class)]
 class LoginSuccessTest extends TestCase
 {
-    /**
-     * @var Type|MockObject
-     */
-    private Type|MockObject $fullPageCacheMock;
+    private Type&MockObject $fullPageCache;
+    private Data&MockObject $helperData;
+    private EmailMarketing&MockObject $helperEmailMarketing;
 
-    /**
-     * @var Data|MockObject
-     */
-    private Data|MockObject $helperDataMock;
-
-    /**
-     * @var EmailMarketing|MockObject
-     */
-    private EmailMarketing|MockObject $helperMarketingMock;
-
-    /**
-     * @var LoginSuccess
-     */
     private LoginSuccess $observer;
 
-    /**
-     * @inheritdoc
-     */
     protected function setUp(): void
     {
-        $this->fullPageCacheMock   = $this->createMock(Type::class);
-        $this->helperDataMock      = $this->createMock(Data::class);
-        $this->helperMarketingMock = $this->createMock(EmailMarketing::class);
+        $this->fullPageCache        = $this->createMock(Type::class);
+        $this->helperData           = $this->createMock(Data::class);
+        $this->helperEmailMarketing = $this->createMock(EmailMarketing::class);
 
         $this->observer = new LoginSuccess(
-            $this->fullPageCacheMock,
-            $this->helperDataMock,
-            $this->helperMarketingMock
+            $this->fullPageCache,
+            $this->helperData,
+            $this->helperEmailMarketing
         );
     }
 
-    /**
-     * When email marketing is enabled the full page cache is cleaned by tag.
-     */
-    public function testExecuteCleansCacheWhenEnabled(): void
+    public function testExecuteCleansCacheWhenMarketingEnabled(): void
     {
-        $this->helperDataMock->method('getScopeId')->willReturn(1);
-        $this->helperMarketingMock->method('isEnableEmailMarketing')->with(1)->willReturn(true);
+        $this->helperData->method('getScopeId')->willReturn(1);
+        $this->helperEmailMarketing->method('isEnableEmailMarketing')->with(1)->willReturn(true);
 
-        $this->fullPageCacheMock->expects($this->once())
+        $this->fullPageCache->expects($this->once())
             ->method('clean')
-            ->with($this->anything(), [EmailMarketing::CACHE_TAG]);
+            ->with(Zend_Cache::CLEANING_MODE_MATCHING_ANY_TAG, [EmailMarketing::CACHE_TAG]);
 
         $this->observer->execute($this->createMock(Observer::class));
     }
 
-    /**
-     * When email marketing is disabled the cache is left untouched.
-     */
-    public function testExecuteSkipsCacheWhenDisabled(): void
+    public function testExecuteSkipsCleanWhenMarketingDisabled(): void
     {
-        $this->helperDataMock->method('getScopeId')->willReturn(1);
-        $this->helperMarketingMock->method('isEnableEmailMarketing')->willReturn(false);
+        $this->helperData->method('getScopeId')->willReturn(1);
+        $this->helperEmailMarketing->method('isEnableEmailMarketing')->willReturn(false);
 
-        $this->fullPageCacheMock->expects($this->never())->method('clean');
+        $this->fullPageCache->expects($this->never())->method('clean');
 
         $this->observer->execute($this->createMock(Observer::class));
     }
 
-    /**
-     * A failure resolving the scope id is swallowed and null scope is used.
-     */
-    public function testExecuteHandlesScopeIdException(): void
+    public function testExecuteFallsBackToNullScopeWhenGetScopeIdThrows(): void
     {
-        $this->helperDataMock->method('getScopeId')
-            ->willThrowException(new \Exception('no scope'));
-        $this->helperMarketingMock->expects($this->once())
+        $this->helperData->method('getScopeId')->willThrowException(new Exception('no scope'));
+        $this->helperEmailMarketing->expects($this->once())
             ->method('isEnableEmailMarketing')
             ->with(null)
             ->willReturn(false);
 
-        $this->fullPageCacheMock->expects($this->never())->method('clean');
+        $this->fullPageCache->expects($this->never())->method('clean');
 
         $this->observer->execute($this->createMock(Observer::class));
     }

@@ -23,39 +23,25 @@ declare(strict_types=1);
 namespace Mageplaza\Smtp\Test\Unit\Model\Source;
 
 use Mageplaza\Smtp\Model\Source\Status;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 
-/**
- * Class StatusTest
- * @package Mageplaza\Smtp\Test\Unit\Model\Source
- */
+#[CoversClass(Status::class)]
 class StatusTest extends TestCase
 {
-    /**
-     * @var Status
-     */
     private Status $model;
 
-    /**
-     * @inheritdoc
-     */
     protected function setUp(): void
     {
         $this->model = new Status();
     }
 
-    /**
-     * Log status constants.
-     */
     public function testConstants(): void
     {
         $this->assertSame(1, Status::STATUS_SUCCESS);
         $this->assertSame(0, Status::STATUS_ERROR);
     }
 
-    /**
-     * Every option must expose a value and a label key.
-     */
     public function testToOptionArrayFormat(): void
     {
         $result = $this->model->toOptionArray();
@@ -67,13 +53,17 @@ class StatusTest extends TestCase
         }
     }
 
-    /**
-     * Success / Error options, in order.
-     */
     public function testToOptionArrayValues(): void
     {
         $values = array_column($this->model->toOptionArray(), 'value');
 
         $this->assertSame([Status::STATUS_SUCCESS, Status::STATUS_ERROR], $values);
+    }
+
+    public function testToOptionArrayLabels(): void
+    {
+        $labels = array_map('strval', array_column($this->model->toOptionArray(), 'label'));
+
+        $this->assertSame(['Success', 'Error'], $labels);
     }
 }

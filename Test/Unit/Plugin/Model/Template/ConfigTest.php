@@ -24,36 +24,23 @@ namespace Mageplaza\Smtp\Test\Unit\Plugin\Model\Template;
 
 use Magento\Email\Model\Template\Config as EmailConfig;
 use Mageplaza\Smtp\Plugin\Model\Template\Config;
+use PHPUnit\Framework\Attributes\CoversClass;
+use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
-/**
- * Class ConfigTest
- * @package Mageplaza\Smtp\Test\Unit\Plugin\Model\Template
- */
+#[CoversClass(Config::class)]
 class ConfigTest extends TestCase
 {
-    /**
-     * @var EmailConfig
-     */
-    private EmailConfig $subjectMock;
+    private EmailConfig&MockObject $subject;
 
-    /**
-     * @var Config
-     */
     private Config $plugin;
 
-    /**
-     * @inheritdoc
-     */
     protected function setUp(): void
     {
-        $this->subjectMock = $this->createMock(EmailConfig::class);
-        $this->plugin      = new Config();
+        $this->subject = $this->createMock(EmailConfig::class);
+        $this->plugin  = new Config();
     }
 
-    /**
-     * The abandoned cart template must be removed from the available list.
-     */
     public function testAfterGetAvailableTemplatesRemovesAbandonedCart(): void
     {
         $templates = [
@@ -62,7 +49,7 @@ class ConfigTest extends TestCase
             ['value' => 'template_b', 'label' => 'B'],
         ];
 
-        $result = $this->plugin->afterGetAvailableTemplates($this->subjectMock, $templates);
+        $result = $this->plugin->afterGetAvailableTemplates($this->subject, $templates);
 
         $values = array_column($result, 'value');
         $this->assertNotContains('mpsmtp_abandoned_cart_email_templates', $values);
@@ -70,38 +57,32 @@ class ConfigTest extends TestCase
         $this->assertContains('template_b', $values);
     }
 
-    /**
-     * The abandoned cart template is removed even when it is the first entry.
-     */
-    public function testAfterGetAvailableTemplatesRemovesAbandonedCartAtFirstPosition(): void
+    public function testAfterGetAvailableTemplatesRemovesAbandonedCartAtFirstPositionLeavesKeyGap(): void
     {
         $templates = [
-            ['value' => 'mpsmtp_abandoned_cart_email_templates', 'label' => 'ACE'],
-            ['value' => 'template_a', 'label' => 'A'],
+            0 => ['value' => 'mpsmtp_abandoned_cart_email_templates', 'label' => 'ACE'],
+            1 => ['value' => 'template_a', 'label' => 'A'],
         ];
 
-        $result = $this->plugin->afterGetAvailableTemplates($this->subjectMock, $templates);
+        $result = $this->plugin->afterGetAvailableTemplates($this->subject, $templates);
 
-        $values = array_column($result, 'value');
-        $this->assertSame(['template_a'], $values);
+        // unset() removes the matched key without reindexing — the gap at 0 stays.
+        $this->assertArrayNotHasKey(0, $result);
+        $this->assertSame(['value' => 'template_a', 'label' => 'A'], $result[1]);
     }
 
-    /**
-     * Note on a known quirk: when the abandoned cart template is NOT present,
-     * array_search() returns false which unset() coerces to index 0, so the
-     * first template is dropped. We assert that documented behaviour here so a
-     * future refactor that changes it is noticed.
-     */
     public function testAfterGetAvailableTemplatesDropsFirstWhenTargetAbsent(): void
     {
+        // array_search() returns false when the target is absent; unset() coerces the
+        // false key to index 0, so the first template is dropped even though it never
+        // matched — pinned so a future refactor that changes this is noticed.
         $templates = [
             ['value' => 'template_a', 'label' => 'A'],
             ['value' => 'template_b', 'label' => 'B'],
         ];
 
-        $result = $this->plugin->afterGetAvailableTemplates($this->subjectMock, $templates);
+        $result = $this->plugin->afterGetAvailableTemplates($this->subject, $templates);
 
-        // Index 0 (template_a) is removed due to the false->0 coercion.
         $this->assertSame(['template_b'], array_values(array_column($result, 'value')));
     }
 }

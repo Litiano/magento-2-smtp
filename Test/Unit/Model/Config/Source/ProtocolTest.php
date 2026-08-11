@@ -23,48 +23,35 @@ declare(strict_types=1);
 namespace Mageplaza\Smtp\Test\Unit\Model\Config\Source;
 
 use Mageplaza\Smtp\Model\Config\Source\Protocol;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 
-/**
- * Class ProtocolTest
- * @package Mageplaza\Smtp\Test\Unit\Model\Config\Source
- */
+#[CoversClass(Protocol::class)]
 class ProtocolTest extends TestCase
 {
-    /**
-     * @var Protocol
-     */
     private Protocol $model;
 
-    /**
-     * @inheritdoc
-     */
     protected function setUp(): void
     {
         $this->model = new Protocol();
     }
 
-    /**
-     * Every option must expose a value and a label key.
-     */
-    public function testToOptionArrayFormat(): void
+    public function testToOptionArrayReturnsThreeOptions(): void
     {
-        $result = $this->model->toOptionArray();
-
-        $this->assertNotEmpty($result);
-        foreach ($result as $option) {
-            $this->assertArrayHasKey('value', $option);
-            $this->assertArrayHasKey('label', $option);
-        }
+        $this->assertCount(3, $this->model->toOptionArray());
     }
 
-    /**
-     * None (empty), SSL and TLS protocols must be offered, in order.
-     */
-    public function testToOptionArrayValues(): void
+    public function testToOptionArrayValuesInOrder(): void
     {
         $values = array_column($this->model->toOptionArray(), 'value');
 
         $this->assertSame(['', 'ssl', 'tls'], $values);
+    }
+
+    public function testToOptionArrayLabelsMatchExpectedPhrases(): void
+    {
+        $labels = array_column($this->model->toOptionArray(), 'label');
+
+        $this->assertEquals([__('None'), __('SSL'), __('TLS')], $labels);
     }
 }

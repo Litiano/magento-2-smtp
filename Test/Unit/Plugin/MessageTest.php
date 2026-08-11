@@ -22,64 +22,60 @@ declare(strict_types=1);
 
 namespace Mageplaza\Smtp\Test\Unit\Plugin;
 
+use Magento\Framework\Exception\MailException;
 use Magento\Framework\Mail\Template\SenderResolverInterface;
 use Magento\Framework\Mail\Template\TransportBuilderByStore;
 use Mageplaza\Smtp\Mail\Rse\Mail;
 use Mageplaza\Smtp\Plugin\Message;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
-/**
- * Class MessageTest
- * @package Mageplaza\Smtp\Test\Unit\Plugin
- */
+#[CoversClass(Message::class)]
 class MessageTest extends TestCase
 {
-    /**
-     * @var Mail|MockObject
-     */
-    private Mail|MockObject $resourceMailMock;
-
-    /**
-     * @var SenderResolverInterface|MockObject
-     */
-    private SenderResolverInterface|MockObject $senderResolverMock;
-
-    /**
-     * @var Message
-     */
+    private Mail&MockObject $resourceMail;
+    private SenderResolverInterface&MockObject $senderResolver;
     private Message $plugin;
 
-    /**
-     * @inheritdoc
-     */
     protected function setUp(): void
     {
-        $this->resourceMailMock   = $this->createMock(Mail::class);
-        $this->senderResolverMock = $this->createMock(SenderResolverInterface::class);
-        $this->plugin             = new Message($this->resourceMailMock, $this->senderResolverMock);
+        $this->resourceMail   = $this->createMock(Mail::class);
+        $this->senderResolver = $this->createMock(SenderResolverInterface::class);
+        $this->plugin         = new Message($this->resourceMail, $this->senderResolver);
     }
 
-    /**
-     * The resolved sender is forwarded to the mail resource and arguments are preserved.
-     */
-    public function testBeforeSetFromByStoreResolvesAndForwards(): void
+    public function testBeforeSetFromByStoreResolvesAndForwardsArguments(): void
     {
         $subject = $this->createMock(TransportBuilderByStore::class);
         $from    = 'general';
         $store   = 1;
 
-        $this->senderResolverMock->expects($this->once())
+        $this->senderResolver->expects($this->once())
             ->method('resolve')
             ->with($from, $store)
             ->willReturn(['email' => 'store@example.com', 'name' => 'Store Owner']);
 
-        $this->resourceMailMock->expects($this->once())
+        $this->resourceMail->expects($this->once())
             ->method('setFromByStore')
             ->with('store@example.com', 'Store Owner');
 
         $result = $this->plugin->beforeSetFromByStore($subject, $from, $store);
 
         $this->assertSame([$from, $store], $result);
+    }
+
+    public function testBeforeSetFromByStorePropagatesResolverException(): void
+    {
+        $subject = $this->createMock(TransportBuilderByStore::class);
+
+        $this->senderResolver->method('resolve')
+            ->willThrowException(new MailException(__('resolve failed')));
+        $this->resourceMail->expects($this->never())->method('setFromByStore');
+
+        $this->expectException(MailException::class);
+        $this->expectExceptionMessage('resolve failed');
+
+        $this->plugin->beforeSetFromByStore($subject, 'general', 1);
     }
 }

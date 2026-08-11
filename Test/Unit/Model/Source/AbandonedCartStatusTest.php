@@ -23,74 +23,55 @@ declare(strict_types=1);
 namespace Mageplaza\Smtp\Test\Unit\Model\Source;
 
 use Mageplaza\Smtp\Model\Source\AbandonedCartStatus;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 
-/**
- * Class AbandonedCartStatusTest
- * @package Mageplaza\Smtp\Test\Unit\Model\Source
- */
+#[CoversClass(AbandonedCartStatus::class)]
 class AbandonedCartStatusTest extends TestCase
 {
-    /**
-     * @var AbandonedCartStatus
-     */
     private AbandonedCartStatus $model;
 
-    /**
-     * @inheritdoc
-     */
     protected function setUp(): void
     {
         $this->model = new AbandonedCartStatus();
     }
 
-    /**
-     * Sent / Wait-for-send constants.
-     */
-    public function testConstants(): void
+    public function testConstantsMatchExpectedStatusValues(): void
     {
         $this->assertSame(1, AbandonedCartStatus::SENT);
         $this->assertSame(0, AbandonedCartStatus::WAIT_FOR_SEND);
     }
 
-    /**
-     * The static option array is keyed by status id.
-     */
-    public function testGetOptionArrayKeys(): void
+    public function testGetOptionArrayReturnsSentAndWaitForSendKeyedByStatus(): void
     {
         $options = AbandonedCartStatus::getOptionArray();
 
+        $this->assertCount(2, $options);
         $this->assertArrayHasKey(AbandonedCartStatus::SENT, $options);
         $this->assertArrayHasKey(AbandonedCartStatus::WAIT_FOR_SEND, $options);
+        $this->assertSame('Sent', (string) $options[AbandonedCartStatus::SENT]);
+        $this->assertSame('Wait for send', (string) $options[AbandonedCartStatus::WAIT_FOR_SEND]);
     }
 
-    /**
-     * Every option must expose a value and a label key.
-     */
-    public function testToOptionArrayFormat(): void
+    public function testToOptionArrayTransformsOptionArrayIntoValueLabelPairs(): void
     {
         $result = $this->model->toOptionArray();
 
-        $this->assertNotEmpty($result);
-        foreach ($result as $option) {
-            $this->assertArrayHasKey('value', $option);
-            $this->assertArrayHasKey('label', $option);
-        }
+        $this->assertCount(2, $result);
+        $this->assertSame(AbandonedCartStatus::SENT, $result[0]['value']);
+        $this->assertSame('Sent', (string) $result[0]['label']);
+        $this->assertSame(AbandonedCartStatus::WAIT_FOR_SEND, $result[1]['value']);
+        $this->assertSame('Wait for send', (string) $result[1]['label']);
     }
 
-    /**
-     * toOptionArray() must reshape getOptionArray() preserving the status ids
-     * as values and their labels.
-     */
     public function testToOptionArrayMirrorsGetOptionArray(): void
     {
-        $source  = AbandonedCartStatus::getOptionArray();
+        $source = AbandonedCartStatus::getOptionArray();
         $options = $this->model->toOptionArray();
 
         $this->assertSameSize($source, $options);
 
         foreach ($options as $option) {
-            // __() returns a fresh Phrase each call, so compare the rendered strings.
             $this->assertArrayHasKey($option['value'], $source);
             $this->assertSame((string) $source[$option['value']], (string) $option['label']);
         }

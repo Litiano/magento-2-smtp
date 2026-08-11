@@ -31,87 +31,82 @@ use Magento\Quote\Model\QuoteIdMask;
 use Magento\Quote\Model\QuoteIdMaskFactory;
 use Mageplaza\Smtp\Helper\EmailMarketing;
 use Mageplaza\Smtp\Model\CheckoutManagement;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
-/**
- * Class CheckoutManagementTest
- * @package Mageplaza\Smtp\Test\Unit\Model
- */
+#[CoversClass(CheckoutManagement::class)]
 class CheckoutManagementTest extends TestCase
 {
-    /**
-     * @var QuoteIdMaskFactory|MockObject
-     */
-    private QuoteIdMaskFactory|MockObject $quoteIdMaskFactoryMock;
+    private QuoteIdMaskFactory&MockObject $quoteIdMaskFactory;
+    private CartRepositoryInterface&MockObject $cartRepository;
+    private EmailMarketing&MockObject $helperEmailMarketing;
 
-    /**
-     * @var CartRepositoryInterface|MockObject
-     */
-    private CartRepositoryInterface|MockObject $cartRepositoryMock;
+    private CheckoutManagement $sut;
 
-    /**
-     * @var EmailMarketing|MockObject
-     */
-    private EmailMarketing|MockObject $helperMock;
-
-    /**
-     * @var CheckoutManagement
-     */
-    private CheckoutManagement $model;
-
-    /**
-     * @inheritdoc
-     */
     protected function setUp(): void
     {
-        $this->quoteIdMaskFactoryMock = $this->getMockBuilder(QuoteIdMaskFactory::class)
+        $this->quoteIdMaskFactory = $this->getMockBuilder(QuoteIdMaskFactory::class)
             ->disableOriginalConstructor()
             ->onlyMethods(['create'])
             ->getMock();
-        $this->cartRepositoryMock = $this->createMock(CartRepositoryInterface::class);
-        $this->helperMock         = $this->createMock(EmailMarketing::class);
+        $this->cartRepository = $this->createMock(CartRepositoryInterface::class);
+        $this->helperEmailMarketing = $this->createMock(EmailMarketing::class);
 
-        $this->model = new CheckoutManagement(
-            $this->quoteIdMaskFactoryMock,
-            $this->cartRepositoryMock,
-            $this->helperMock
+        $this->sut = new CheckoutManagement(
+            $this->quoteIdMaskFactory,
+            $this->cartRepository,
+            $this->helperEmailMarketing
         );
 
-        // EmailMarketing::jsonDecode() resolves the Json helper through the global OM.
+        // EmailMarketing::jsonDecode() resolves the Json helper through the global ObjectManager.
         $jsonHelper = $this->createMock(JsonHelper::class);
-        $jsonHelper->method('jsonDecode')->willReturnCallback(static fn($v) => json_decode($v, true));
+        $jsonHelper->method('jsonDecode')->willReturnCallback(static fn ($v) => json_decode($v, true));
         $om = $this->createMock(ObjectManagerInterface::class);
         $om->method('get')->willReturn($jsonHelper);
         ObjectManager::setInstance($om);
     }
 
-    /**
-     * Enable the email-marketing gate.
-     */
     private function enableGate(): void
     {
-        $this->helperMock->method('isEnableEmailMarketing')->willReturn(true);
-        $this->helperMock->method('getSecretKey')->willReturn('secret');
-        $this->helperMock->method('getAppID')->willReturn('app');
+        $this->helperEmailMarketing->method('isEnableEmailMarketing')->willReturn(true);
+        $this->helperEmailMarketing->method('getSecretKey')->willReturn('secret');
+        $this->helperEmailMarketing->method('getAppID')->willReturn('app');
     }
 
-    /**
-     * With the feature off, no request is built or sent.
-     */
-    public function testUpdateOrderSkipsWhenDisabled(): void
+    public function testUpdateOrderSkipsWhenEmailMarketingDisabled(): void
     {
-        $this->helperMock->method('isEnableEmailMarketing')->willReturn(false);
-        $this->quoteIdMaskFactoryMock->expects($this->never())->method('create');
-        $this->helperMock->expects($this->never())->method('sendRequestWithoutWaitResponse');
+        $this->helperEmailMarketing->method('isEnableEmailMarketing')->willReturn(false);
+        $this->helperEmailMarketing->expects($this->never())->method('getSecretKey');
+        $this->quoteIdMaskFactory->expects($this->never())->method('create');
+        $this->helperEmailMarketing->expects($this->never())->method('sendRequestWithoutWaitResponse');
 
-        $this->model->updateOrder('masked123', '{"city":"NY"}', false);
+        $this->sut->updateOrder('masked123', '{"city":"NY"}', false);
     }
 
-    /**
-     * The masked cart is resolved, the address decoded and the ACE payload pushed.
-     */
-    public function testUpdateOrderSendsAceData(): void
+    public function testUpdateOrderSkipsWhenSecretKeyMissing(): void
+    {
+        $this->helperEmailMarketing->method('isEnableEmailMarketing')->willReturn(true);
+        $this->helperEmailMarketing->method('getSecretKey')->willReturn('');
+        $this->helperEmailMarketing->expects($this->never())->method('getAppID');
+        $this->quoteIdMaskFactory->expects($this->never())->method('create');
+        $this->helperEmailMarketing->expects($this->never())->method('sendRequestWithoutWaitResponse');
+
+        $this->sut->updateOrder('masked123', '{"city":"NY"}', false);
+    }
+
+    public function testUpdateOrderSkipsWhenAppIdMissing(): void
+    {
+        $this->helperEmailMarketing->method('isEnableEmailMarketing')->willReturn(true);
+        $this->helperEmailMarketing->method('getSecretKey')->willReturn('secret');
+        $this->helperEmailMarketing->method('getAppID')->willReturn('');
+        $this->quoteIdMaskFactory->expects($this->never())->method('create');
+        $this->helperEmailMarketing->expects($this->never())->method('sendRequestWithoutWaitResponse');
+
+        $this->sut->updateOrder('masked123', '{"city":"NY"}', false);
+    }
+
+    public function testUpdateOrderSendsAceDataWhenAllConditionsMet(): void
     {
         $this->enableGate();
 
@@ -122,20 +117,20 @@ class CheckoutManagementTest extends TestCase
             ->getMock();
         $quoteIdMask->expects($this->once())->method('load')->with('masked123', 'masked_id')
             ->willReturn(new DataObject(['quote_id' => 99]));
-        $this->quoteIdMaskFactoryMock->method('create')->willReturn($quoteIdMask);
+        $this->quoteIdMaskFactory->method('create')->willReturn($quoteIdMask);
 
         $quote = new DataObject(['entity_id' => 99]);
-        $this->cartRepositoryMock->expects($this->once())->method('getActive')->with(99)->willReturn($quote);
+        $this->cartRepository->expects($this->once())->method('getActive')->with(99)->willReturn($quote);
 
-        $this->helperMock->expects($this->once())
+        $this->helperEmailMarketing->expects($this->once())
             ->method('getACEData')
             ->with($quote, ['city' => 'NY'], false)
             ->willReturn(['ace' => 'payload']);
 
-        $this->helperMock->expects($this->once())
+        $this->helperEmailMarketing->expects($this->once())
             ->method('sendRequestWithoutWaitResponse')
             ->with(['ace' => 'payload'], EmailMarketing::CHECKOUT_URL);
 
-        $this->model->updateOrder('masked123', '{"city":"NY"}', false);
+        $this->sut->updateOrder('masked123', '{"city":"NY"}', false);
     }
 }

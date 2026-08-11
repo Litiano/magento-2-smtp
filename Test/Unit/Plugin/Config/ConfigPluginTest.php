@@ -25,72 +25,36 @@ namespace Mageplaza\Smtp\Test\Unit\Plugin\Config;
 use Magento\Config\Model\Config;
 use Magento\Framework\App\RequestInterface;
 use Magento\Framework\Message\ManagerInterface;
-use Magento\Framework\TestFramework\Unit\Helper\ObjectManager;
+use Magento\Framework\TestFramework\Unit\Helper\MockCreationTrait;
 use Mageplaza\Smtp\Plugin\Config\ConfigPlugin;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
-/**
- * Class ConfigPluginTest
- * @package Mageplaza\Smtp\Test\Unit\Plugin\Config
- */
+#[CoversClass(ConfigPlugin::class)]
 class ConfigPluginTest extends TestCase
 {
-    /**
-     * @var RequestInterface|MockObject
-     */
-    private RequestInterface|MockObject $requestMock;
+    use MockCreationTrait;
 
-    /**
-     * @var ManagerInterface|MockObject
-     */
-    private ManagerInterface|MockObject $messageManagerMock;
-
-    /**
-     * @var ConfigPlugin
-     */
+    private RequestInterface&MockObject $request;
+    private ManagerInterface&MockObject $messageManager;
     private ConfigPlugin $plugin;
 
-    /**
-     * @var ObjectManager
-     */
-    private ObjectManager $objectManager;
-
-    /**
-     * @inheritdoc
-     */
     protected function setUp(): void
     {
-        $this->requestMock        = $this->createMock(RequestInterface::class);
-        $this->messageManagerMock = $this->createMock(ManagerInterface::class);
-        $this->plugin             = new ConfigPlugin($this->requestMock, $this->messageManagerMock);
-        $this->objectManager      = new ObjectManager($this);
+        $this->request        = $this->createMock(RequestInterface::class);
+        $this->messageManager = $this->createMock(ManagerInterface::class);
+        $this->plugin         = new ConfigPlugin($this->request, $this->messageManager);
     }
 
-    /**
-     * Build a real Config object carrying section + groups data.
-     *
-     * @param string $section
-     * @param array  $groups
-     *
-     * @return Config
-     */
-    private function createConfig(string $section, array $groups): Config
+    private function createConfigMock(): Config&MockObject
     {
-        /** @var Config $config */
-        $config = $this->objectManager->getObject(Config::class);
-        $config->setData('section', $section);
-        $config->setData('groups', $groups);
-
-        return $config;
+        return $this->createPartialMockWithReflection(
+            Config::class,
+            ['getSection', 'getGroups', 'setGroups']
+        );
     }
 
-    /**
-     * @param string $protocol
-     * @param string $port
-     *
-     * @return array
-     */
     private function smtpGroups(string $protocol, string $port): array
     {
         return [
@@ -103,47 +67,74 @@ class ConfigPluginTest extends TestCase
         ];
     }
 
-    /**
-     * TLS with the SSL-only port 465 is silently corrected to 587 with a notice.
-     */
-    public function testBeforeSaveFixesTlsPort(): void
+
+    public function testBeforeSaveIgnoresNonSmtpSection(): void
     {
-        $config = $this->createConfig('smtp', $this->smtpGroups('tls', '465'));
-        $this->messageManagerMock->expects($this->once())->method('addNoticeMessage');
+        $config = $this->createConfigMock();
+        $config->method('getSection')->willReturn('general');
+        $config->expects($this->never())->method('getGroups');
+        $config->expects($this->never())->method('setGroups');
+        $this->messageManager->expects($this->never())->method('addNoticeMessage');
 
         $result = $this->plugin->beforeSave($config);
 
-        $groups = $config->getGroups();
-        $this->assertSame('587', $groups['configuration_option']['fields']['port']['value']);
         $this->assertSame([], $result);
     }
 
-    /**
-     * SSL keeps port 465 untouched and raises no notice.
-     */
-    public function testBeforeSaveKeepsSslPort(): void
+    public function testBeforeSaveReturnsEmptyArrayWhenGroupsHaveNoProtocolField(): void
     {
-        $config = $this->createConfig('smtp', $this->smtpGroups('ssl', '465'));
-        $this->messageManagerMock->expects($this->never())->method('addNoticeMessage');
-
-        $this->plugin->beforeSave($config);
-
-        $groups = $config->getGroups();
-        $this->assertSame('465', $groups['configuration_option']['fields']['port']['value']);
-    }
-
-    /**
-     * A non-SMTP section is ignored entirely.
-     */
-    public function testBeforeSaveIgnoresOtherSections(): void
-    {
-        $config = $this->createConfig('general', $this->smtpGroups('tls', '465'));
-        $this->messageManagerMock->expects($this->never())->method('addNoticeMessage');
+        $config = $this->createConfigMock();
+        $config->method('getSection')->willReturn('smtp');
+        $config->method('getGroups')->willReturn([]);
+        $config->expects($this->never())->method('setGroups');
+        $this->messageManager->expects($this->never())->method('addNoticeMessage');
 
         $result = $this->plugin->beforeSave($config);
 
-        $groups = $config->getGroups();
-        $this->assertSame('465', $groups['configuration_option']['fields']['port']['value']);
+        $this->assertSame([], $result);
+    }
+
+    public function testBeforeSaveRewritesPortAndAddsNoticeWhenTlsWithSslOnlyPort(): void
+    {
+        $config = $this->createConfigMock();
+        $config->method('getSection')->willReturn('smtp');
+        $config->method('getGroups')->willReturn($this->smtpGroups('tls', '465'));
+        $config->expects($this->once())->method('setGroups')->with(
+            $this->callback(
+                static fn (array $groups): bool =>
+                    $groups['configuration_option']['fields']['port']['value'] === '587'
+            )
+        );
+        $this->messageManager->expects($this->once())->method('addNoticeMessage');
+
+        $result = $this->plugin->beforeSave($config);
+
+        $this->assertSame([], $result);
+    }
+
+    public function testBeforeSaveSkipsRewriteWhenTlsPortAlreadyCorrect(): void
+    {
+        $config = $this->createConfigMock();
+        $config->method('getSection')->willReturn('smtp');
+        $config->method('getGroups')->willReturn($this->smtpGroups('tls', '587'));
+        $config->expects($this->never())->method('setGroups');
+        $this->messageManager->expects($this->never())->method('addNoticeMessage');
+
+        $result = $this->plugin->beforeSave($config);
+
+        $this->assertSame([], $result);
+    }
+
+    public function testBeforeSaveSkipsRewriteWhenProtocolIsNotTls(): void
+    {
+        $config = $this->createConfigMock();
+        $config->method('getSection')->willReturn('smtp');
+        $config->method('getGroups')->willReturn($this->smtpGroups('ssl', '465'));
+        $config->expects($this->never())->method('setGroups');
+        $this->messageManager->expects($this->never())->method('addNoticeMessage');
+
+        $result = $this->plugin->beforeSave($config);
+
         $this->assertSame([], $result);
     }
 }

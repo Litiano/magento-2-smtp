@@ -23,58 +23,54 @@ declare(strict_types=1);
 namespace Mageplaza\Smtp\Test\Unit\Model\Config\Source;
 
 use Mageplaza\Smtp\Model\Config\Source\Authentication;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 
-/**
- * Class AuthenticationTest
- * @package Mageplaza\Smtp\Test\Unit\Model\Config\Source
- */
+#[CoversClass(Authentication::class)]
 class AuthenticationTest extends TestCase
 {
-    /**
-     * @var Authentication
-     */
     private Authentication $model;
 
-    /**
-     * @inheritdoc
-     */
     protected function setUp(): void
     {
         $this->model = new Authentication();
     }
 
-    /**
-     * Every option must expose a value and a label key.
-     */
-    public function testToOptionArrayFormat(): void
+    public function testToOptionArrayReturnsFiveOptions(): void
     {
-        $result = $this->model->toOptionArray();
+        $this->assertCount(5, $this->model->toOptionArray());
+    }
 
-        $this->assertNotEmpty($result);
-        foreach ($result as $option) {
+    public function testToOptionArrayEveryOptionHasValueAndLabelKeys(): void
+    {
+        foreach ($this->model->toOptionArray() as $option) {
             $this->assertArrayHasKey('value', $option);
             $this->assertArrayHasKey('label', $option);
         }
     }
 
-    /**
-     * The five supported authentication methods must be present, in order.
-     */
-    public function testToOptionArrayValues(): void
+    public function testToOptionArrayValuesMatchDeclaredOrder(): void
     {
         $values = array_column($this->model->toOptionArray(), 'value');
 
         $this->assertSame(['smtp', 'plain', 'login', 'crammd5', 'oauth2'], $values);
     }
 
-    /**
-     * OAuth2 (Office365) must be offered, it drives the Graph API flow.
-     */
-    public function testOauth2OptionExists(): void
+    public function testToOptionArrayFirstOptionIsNone(): void
     {
-        $values = array_column($this->model->toOptionArray(), 'value');
+        // assertEquals — the label is a Phrase object, not a scalar.
+        $this->assertEquals(
+            ['value' => 'smtp', 'label' => __('NONE')],
+            $this->model->toOptionArray()[0]
+        );
+    }
 
-        $this->assertContains('oauth2', $values);
+    public function testToOptionArrayLastOptionIsOauth2(): void
+    {
+        // OAuth2 drives the Office365 Graph API flow — the exact label wording is load-bearing.
+        $this->assertEquals(
+            ['value' => 'oauth2', 'label' => __('OAUTH2 (Office365)')],
+            $this->model->toOptionArray()[4]
+        );
     }
 }

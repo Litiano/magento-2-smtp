@@ -23,57 +23,27 @@ declare(strict_types=1);
 namespace Mageplaza\Smtp\Test\Unit\Model\Config\Source;
 
 use Mageplaza\Smtp\Model\Config\Source\Newsletter;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 
-/**
- * Class NewsletterTest
- * @package Mageplaza\Smtp\Test\Unit\Model\Config\Source
- */
+#[CoversClass(Newsletter::class)]
 class NewsletterTest extends TestCase
 {
-    /**
-     * @var Newsletter
-     */
     private Newsletter $model;
 
-    /**
-     * @inheritdoc
-     */
     protected function setUp(): void
     {
         $this->model = new Newsletter();
     }
 
-    /**
-     * Constants back the option values.
-     */
-    public function testConstants(): void
-    {
-        $this->assertSame('all', Newsletter::ALL);
-        $this->assertSame('subscribed', Newsletter::SUBSCRIBED);
-    }
-
-    /**
-     * Every option must expose a value and a label key.
-     */
-    public function testToOptionArrayFormat(): void
+    public function testToOptionArrayReturnsAllAndSubscribedOptions(): void
     {
         $result = $this->model->toOptionArray();
 
-        $this->assertNotEmpty($result);
-        foreach ($result as $option) {
-            $this->assertArrayHasKey('value', $option);
-            $this->assertArrayHasKey('label', $option);
-        }
-    }
-
-    /**
-     * All / Only Subscribed options, in order.
-     */
-    public function testToOptionArrayValues(): void
-    {
-        $values = array_column($this->model->toOptionArray(), 'value');
-
-        $this->assertSame([Newsletter::ALL, Newsletter::SUBSCRIBED], $values);
+        $this->assertCount(2, $result);
+        $this->assertSame(Newsletter::ALL, $result[0]['value']);
+        $this->assertSame('All', (string) $result[0]['label']);
+        $this->assertSame(Newsletter::SUBSCRIBED, $result[1]['value']);
+        $this->assertSame('Only Subscribed', (string) $result[1]['label']);
     }
 }

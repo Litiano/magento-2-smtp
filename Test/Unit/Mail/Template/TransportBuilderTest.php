@@ -27,115 +27,81 @@ use Magento\Framework\Mail\Template\TransportBuilder as CoreTransportBuilder;
 use Magento\Framework\Registry;
 use Mageplaza\Smtp\Mail\Rse\Mail;
 use Mageplaza\Smtp\Mail\Template\TransportBuilder;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
-/**
- * Class TransportBuilderTest
- * @package Mageplaza\Smtp\Test\Unit\Mail\Template
- */
+#[CoversClass(TransportBuilder::class)]
 class TransportBuilderTest extends TestCase
 {
-    /**
-     * @var Registry|MockObject
-     */
-    private Registry|MockObject $registryMock;
+    private Registry&MockObject $registry;
+    private Mail&MockObject $resourceMail;
+    private SenderResolverInterface&MockObject $senderResolver;
+    private CoreTransportBuilder&MockObject $subject;
 
-    /**
-     * @var Mail|MockObject
-     */
-    private Mail|MockObject $resourceMailMock;
-
-    /**
-     * @var SenderResolverInterface|MockObject
-     */
-    private SenderResolverInterface|MockObject $senderResolverMock;
-
-    /**
-     * @var CoreTransportBuilder|MockObject
-     */
-    private CoreTransportBuilder|MockObject $subjectMock;
-
-    /**
-     * @var TransportBuilder
-     */
     private TransportBuilder $plugin;
 
-    /**
-     * @inheritdoc
-     */
     protected function setUp(): void
     {
-        $this->registryMock       = $this->createMock(Registry::class);
-        $this->resourceMailMock   = $this->createMock(Mail::class);
-        $this->senderResolverMock = $this->createMock(SenderResolverInterface::class);
-        $this->subjectMock        = $this->createMock(CoreTransportBuilder::class);
+        $this->registry       = $this->createMock(Registry::class);
+        $this->resourceMail   = $this->createMock(Mail::class);
+        $this->senderResolver = $this->createMock(SenderResolverInterface::class);
+        $this->subject        = $this->createMock(CoreTransportBuilder::class);
 
         $this->plugin = new TransportBuilder(
-            $this->registryMock,
-            $this->resourceMailMock,
-            $this->senderResolverMock
+            $this->registry,
+            $this->resourceMail,
+            $this->senderResolver
         );
     }
 
-    /**
-     * When a store is passed, the current store id is (re)registered.
-     */
-    public function testBeforeSetTemplateOptionsRegistersStore(): void
+    public function testBeforeSetTemplateOptionsRegistersStoreWhenStoreKeyPresent(): void
     {
-        $this->registryMock->expects($this->once())
+        $this->registry->expects($this->once())
             ->method('unregister')->with('mp_smtp_store_id');
-        $this->registryMock->expects($this->once())
+        $this->registry->expects($this->once())
             ->method('register')->with('mp_smtp_store_id', 3);
 
-        $result = $this->plugin->beforeSetTemplateOptions($this->subjectMock, ['store' => 3]);
+        $result = $this->plugin->beforeSetTemplateOptions($this->subject, ['store' => 3]);
 
         $this->assertSame([['store' => 3]], $result);
     }
 
-    /**
-     * Without a store key, nothing is registered (only the stale value is cleared).
-     */
-    public function testBeforeSetTemplateOptionsWithoutStore(): void
+    public function testBeforeSetTemplateOptionsSkipsRegisterWhenStoreKeyAbsent(): void
     {
-        $this->registryMock->expects($this->once())->method('unregister');
-        $this->registryMock->expects($this->never())->method('register');
+        $this->registry->expects($this->once())->method('unregister')->with('mp_smtp_store_id');
+        $this->registry->expects($this->never())->method('register');
 
-        $result = $this->plugin->beforeSetTemplateOptions($this->subjectMock, ['area' => 'frontend']);
+        $result = $this->plugin->beforeSetTemplateOptions($this->subject, ['area' => 'frontend']);
 
         $this->assertSame([['area' => 'frontend']], $result);
     }
 
-    /**
-     * A string sender is resolved before being handed to the mail resource.
-     */
-    public function testBeforeSetFromResolvesStringSender(): void
+    public function testBeforeSetFromResolvesStringSenderThroughResolver(): void
     {
-        $this->senderResolverMock->expects($this->once())
+        $this->senderResolver->expects($this->once())
             ->method('resolve')
             ->with('general')
             ->willReturn(['email' => 'general@example.com', 'name' => 'General']);
-        $this->resourceMailMock->expects($this->once())
+        $this->resourceMail->expects($this->once())
             ->method('setFromByStore')
             ->with('general@example.com', 'General');
 
-        $result = $this->plugin->beforeSetFrom($this->subjectMock, 'general');
+        $result = $this->plugin->beforeSetFrom($this->subject, 'general');
 
         $this->assertSame(['general'], $result);
     }
 
-    /**
-     * An array sender is used as-is (no resolution needed).
-     */
-    public function testBeforeSetFromUsesArraySenderDirectly(): void
+    public function testBeforeSetFromUsesArraySenderDirectlyWithoutResolver(): void
     {
         $from = ['email' => 'custom@example.com', 'name' => 'Custom'];
-        $this->senderResolverMock->expects($this->never())->method('resolve');
-        $this->resourceMailMock->expects($this->once())
+
+        $this->senderResolver->expects($this->never())->method('resolve');
+        $this->resourceMail->expects($this->once())
             ->method('setFromByStore')
             ->with('custom@example.com', 'Custom');
 
-        $result = $this->plugin->beforeSetFrom($this->subjectMock, $from);
+        $result = $this->plugin->beforeSetFrom($this->subject, $from);
 
         $this->assertSame([$from], $result);
     }

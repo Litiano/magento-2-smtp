@@ -27,44 +27,26 @@ use Magento\Framework\Event;
 use Magento\Framework\Event\Observer;
 use Magento\Framework\Math\Random;
 use Mageplaza\Smtp\Observer\Quote\SetToken;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
-/**
- * Class SetTokenTest
- * @package Mageplaza\Smtp\Test\Unit\Observer\Quote
- */
+#[CoversClass(SetToken::class)]
 class SetTokenTest extends TestCase
 {
-    /**
-     * @var Random|MockObject
-     */
-    private Random|MockObject $randomMock;
+    private Random&MockObject $random;
 
-    /**
-     * @var SetToken
-     */
     private SetToken $observer;
 
-    /**
-     * @inheritdoc
-     */
     protected function setUp(): void
     {
-        $this->randomMock = $this->createMock(Random::class);
-        $this->observer   = new SetToken($this->randomMock);
+        $this->random   = $this->createMock(Random::class);
+        $this->observer = new SetToken($this->random);
     }
 
-    /**
-     * Build an Observer whose event carries the given quote.
-     *
-     * @param DataObject $quote
-     *
-     * @return Observer|MockObject
-     */
-    private function observerWithQuote(DataObject $quote): Observer
+    private function observerWithQuote(DataObject $quote): Observer&MockObject
     {
-        // getQuote() is a magic accessor on the real Event object.
+        // getQuote() is a magic accessor resolved on the real Event object.
         $event    = new Event(['quote' => $quote]);
         $observer = $this->createMock(Observer::class);
         $observer->method('getEvent')->willReturn($event);
@@ -72,13 +54,10 @@ class SetTokenTest extends TestCase
         return $observer;
     }
 
-    /**
-     * A quote without a token gets a freshly generated unique hash.
-     */
     public function testExecuteSetsTokenWhenMissing(): void
     {
         $quote = new DataObject();
-        $this->randomMock->expects($this->once())
+        $this->random->expects($this->once())
             ->method('getUniqueHash')
             ->willReturn('generated-hash');
 
@@ -87,13 +66,10 @@ class SetTokenTest extends TestCase
         $this->assertSame('generated-hash', $quote->getData('mp_smtp_ace_token'));
     }
 
-    /**
-     * An existing token must never be overwritten.
-     */
     public function testExecuteKeepsExistingToken(): void
     {
         $quote = new DataObject(['mp_smtp_ace_token' => 'existing']);
-        $this->randomMock->expects($this->never())->method('getUniqueHash');
+        $this->random->expects($this->never())->method('getUniqueHash');
 
         $this->observer->execute($this->observerWithQuote($quote));
 

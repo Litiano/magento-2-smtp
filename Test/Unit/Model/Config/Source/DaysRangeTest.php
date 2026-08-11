@@ -23,66 +23,43 @@ declare(strict_types=1);
 namespace Mageplaza\Smtp\Test\Unit\Model\Config\Source;
 
 use Mageplaza\Smtp\Model\Config\Source\DaysRange;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 
-/**
- * Class DaysRangeTest
- * @package Mageplaza\Smtp\Test\Unit\Model\Config\Source
- */
+#[CoversClass(DaysRange::class)]
 class DaysRangeTest extends TestCase
 {
-    /**
-     * @var DaysRange
-     */
     private DaysRange $model;
 
-    /**
-     * @inheritdoc
-     */
     protected function setUp(): void
     {
         $this->model = new DaysRange();
     }
 
-    /**
-     * toArray() must be keyed by the range identifiers.
-     */
-    public function testToArrayKeys(): void
+    public function testToArrayReturnsKeyedRangeOptions(): void
     {
-        $keys = array_keys($this->model->toArray());
-
         // PHP casts numeric string array keys ('90') to integers.
-        $this->assertSame(['lifetime', 90, 365, 730, DaysRange::CUSTOM], $keys);
+        $this->assertSame(['lifetime', 90, 365, 730, DaysRange::CUSTOM], array_keys($this->model->toArray()));
     }
 
-    /**
-     * toOptionArray() must reshape every toArray() entry into label/value pairs
-     * while preserving the source keys as values.
-     */
     public function testToOptionArrayMirrorsToArray(): void
     {
         $array   = $this->model->toArray();
         $options = $this->model->toOptionArray();
 
-        $this->assertSameSize($array, $options);
+        $this->assertCount(5, $options);
 
         foreach ($options as $option) {
             $this->assertArrayHasKey('value', $option);
             $this->assertArrayHasKey('label', $option);
-            // The value must be a key of toArray() and the label its matching entry.
-            // __() returns a fresh Phrase each call, so compare the rendered strings.
             $this->assertArrayHasKey($option['value'], $array);
+            // __() returns a fresh Phrase instance each call — compare the rendered strings.
             $this->assertSame((string) $array[$option['value']], (string) $option['label']);
         }
     }
 
-    /**
-     * The custom range option drives the date-range picker.
-     */
-    public function testCustomOptionExists(): void
+    public function testToOptionArrayIncludesCustomRange(): void
     {
-        $values = array_column($this->model->toOptionArray(), 'value');
-
-        $this->assertContains(DaysRange::CUSTOM, $values);
+        $this->assertContains(DaysRange::CUSTOM, array_column($this->model->toOptionArray(), 'value'));
     }
 }

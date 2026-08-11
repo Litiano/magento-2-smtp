@@ -27,117 +27,95 @@ use Magento\Customer\Model\CustomerFactory;
 use Magento\Framework\DataObject;
 use Magento\Framework\Event;
 use Magento\Framework\Event\Observer;
-use Magento\Framework\TestFramework\Unit\Helper\ObjectManager;
+use Magento\Framework\TestFramework\Unit\Helper\MockCreationTrait;
 use Mageplaza\Smtp\Helper\EmailMarketing;
 use Mageplaza\Smtp\Observer\Customer\ModelSaveBefore;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 
-/**
- * Class ModelSaveBeforeTest
- * @package Mageplaza\Smtp\Test\Unit\Observer\Customer
- */
+#[CoversClass(ModelSaveBefore::class)]
 class ModelSaveBeforeTest extends TestCase
 {
-    /**
-     * @var CustomerFactory|MockObject
-     */
-    private CustomerFactory|MockObject $customerFactoryMock;
+    use MockCreationTrait;
 
-    /**
-     * @var EmailMarketing|MockObject
-     */
-    private EmailMarketing|MockObject $helperMock;
+    private CustomerFactory&MockObject $customerFactory;
+    private EmailMarketing&MockObject $helper;
+    private ModelSaveBefore $subject;
 
-    /**
-     * @var ModelSaveBefore
-     */
-    private ModelSaveBefore $observer;
-
-    /**
-     * @inheritdoc
-     */
     protected function setUp(): void
     {
-        $this->customerFactoryMock = $this->getMockBuilder(CustomerFactory::class)
-            ->disableOriginalConstructor()
-            ->onlyMethods(['create'])
-            ->getMock();
-        $this->helperMock = $this->createMock(EmailMarketing::class);
+        $this->customerFactory = $this->createPartialMock(CustomerFactory::class, ['create']);
+        $this->helper = $this->createMock(EmailMarketing::class);
 
-        $this->observer = new ModelSaveBefore($this->customerFactoryMock, $this->helperMock);
+        $this->subject = new ModelSaveBefore($this->customerFactory, $this->helper);
     }
 
-    /**
-     * Enable the email-marketing gate (feature on + credentials present).
-     */
     private function enableGate(): void
     {
-        $this->helperMock->method('isEnableEmailMarketing')->willReturn(true);
-        $this->helperMock->method('getSecretKey')->willReturn('secret');
-        $this->helperMock->method('getAppID')->willReturn('app');
+        $this->helper->method('isEnableEmailMarketing')->willReturn(true);
+        $this->helper->method('getSecretKey')->willReturn('secret');
+        $this->helper->method('getAppID')->willReturn('app');
     }
 
-    /**
-     * @param DataObject $dataObject
-     *
-     * @return Observer|MockObject
-     */
-    private function observerWithDataObject(DataObject $dataObject): Observer
+    private function observerWithDataObject(DataObject $dataObject): Observer&MockObject
     {
-        $event    = new Event(['data_object' => $dataObject]);
+        $event = new Event(['data_object' => $dataObject]);
         $observer = $this->createMock(Observer::class);
         $observer->method('getEvent')->willReturn($event);
 
         return $observer;
     }
 
-    /**
-     * When the feature is disabled nothing is touched.
-     */
-    public function testExecuteDoesNothingWhenDisabled(): void
+    public function testExecuteDoesNothingWhenMarketingDisabled(): void
     {
-        $this->helperMock->method('isEnableEmailMarketing')->willReturn(false);
-        $this->customerFactoryMock->expects($this->never())->method('create');
+        $this->helper->method('isEnableEmailMarketing')->willReturn(false);
+        $this->customerFactory->expects($this->never())->method('create');
 
-        $object = new DataObject();
-        $this->observer->execute($this->observerWithDataObject($object));
+        $dataObject = new DataObject();
+        $this->subject->execute($this->observerWithDataObject($dataObject));
 
-        $this->assertNull($object->getData('is_new_record'));
+        $this->assertNull($dataObject->getData('is_new_record'));
     }
 
-    /**
-     * A record without an id is flagged as new.
-     */
-    public function testExecuteMarksNewRecord(): void
+    public function testExecuteMarksNewRecordWhenIdMissing(): void
     {
         $this->enableGate();
-        $this->customerFactoryMock->expects($this->never())->method('create');
+        $this->customerFactory->expects($this->never())->method('create');
 
-        $object = new DataObject();
-        $this->observer->execute($this->observerWithDataObject($object));
+        $dataObject = new DataObject();
+        $this->subject->execute($this->observerWithDataObject($dataObject));
 
-        $this->assertTrue($object->getData('is_new_record'));
+        $this->assertTrue($dataObject->getData('is_new_record'));
     }
 
-    /**
-     * An existing Customer gets its original snapshot loaded and attached.
-     */
-    public function testExecuteLoadsOriginalCustomer(): void
+    public function testExecuteLoadsOriginalCustomerWhenIdPresentAndIsCustomerInstance(): void
     {
         $this->enableGate();
 
-        /** @var Customer $customer */
-        $customer = (new ObjectManager($this))->getObject(Customer::class);
-        $customer->setId(5);
+        // getId() declared (AbstractModel), setCustomOrigObject() magic (__call -> setData) — one flat list.
+        $customer = $this->createPartialMockWithReflection(Customer::class, ['getId', 'setCustomOrigObject']);
+        $customer->method('getId')->willReturn(5);
 
         $origCustomer = $this->createMock(Customer::class);
-        $loadedMock   = $this->createMock(Customer::class);
-        $loadedMock->expects($this->once())->method('load')->with(5)->willReturn($origCustomer);
-        $this->customerFactoryMock->expects($this->once())->method('create')->willReturn($loadedMock);
+        $loadedCustomer = $this->createMock(Customer::class);
+        $loadedCustomer->expects($this->once())->method('load')->with(5)->willReturn($origCustomer);
+        $this->customerFactory->expects($this->once())->method('create')->willReturn($loadedCustomer);
 
-        $this->observer->execute($this->observerWithDataObject($customer));
+        $customer->expects($this->once())->method('setCustomOrigObject')->with($origCustomer);
 
-        $this->assertSame($origCustomer, $customer->getData('custom_orig_object'));
+        $this->subject->execute($this->observerWithDataObject($customer));
+    }
+
+    public function testExecuteDoesNothingWhenIdPresentButNotCustomerInstance(): void
+    {
+        $this->enableGate();
+        $this->customerFactory->expects($this->never())->method('create');
+
+        $dataObject = new DataObject(['id' => 5]);
+        $this->subject->execute($this->observerWithDataObject($dataObject));
+
+        $this->assertNull($dataObject->getData('is_new_record'));
+        $this->assertNull($dataObject->getData('custom_orig_object'));
     }
 }

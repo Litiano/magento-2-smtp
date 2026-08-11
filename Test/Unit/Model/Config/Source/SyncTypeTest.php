@@ -23,31 +23,20 @@ declare(strict_types=1);
 namespace Mageplaza\Smtp\Test\Unit\Model\Config\Source;
 
 use Mageplaza\Smtp\Model\Config\Source\SyncType;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\TestCase;
 
-/**
- * Class SyncTypeTest
- * @package Mageplaza\Smtp\Test\Unit\Model\Config\Source
- */
+#[CoversClass(SyncType::class)]
 class SyncTypeTest extends TestCase
 {
-    /**
-     * @var SyncType
-     */
     private SyncType $model;
 
-    /**
-     * @inheritdoc
-     */
     protected function setUp(): void
     {
         $this->model = new SyncType();
     }
 
-    /**
-     * Constants back the option values.
-     */
-    public function testConstants(): void
+    public function testConstantsHoldExpectedValues(): void
     {
         $this->assertSame('all', SyncType::ALL);
         $this->assertSame(1, SyncType::CUSTOMERS);
@@ -55,10 +44,7 @@ class SyncTypeTest extends TestCase
         $this->assertSame(3, SyncType::SUBSCRIBERS);
     }
 
-    /**
-     * Every option must expose a value and a label key.
-     */
-    public function testToOptionArrayFormat(): void
+    public function testToOptionArrayEachOptionHasValueAndLabelKeys(): void
     {
         $result = $this->model->toOptionArray();
 
@@ -69,10 +55,7 @@ class SyncTypeTest extends TestCase
         }
     }
 
-    /**
-     * Customers / Orders / Subscribers / Everything, in order.
-     */
-    public function testToOptionArrayValues(): void
+    public function testToOptionArrayReturnsFourItemsInCustomersOrdersSubscribersEverythingOrder(): void
     {
         $values = array_column($this->model->toOptionArray(), 'value');
 

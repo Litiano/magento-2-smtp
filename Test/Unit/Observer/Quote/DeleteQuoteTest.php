@@ -22,39 +22,24 @@ declare(strict_types=1);
 
 namespace Mageplaza\Smtp\Test\Unit\Observer\Quote;
 
+use Exception;
 use Magento\Framework\DataObject;
 use Magento\Framework\Event;
 use Magento\Framework\Event\Observer;
 use Mageplaza\Smtp\Helper\EmailMarketing;
 use Mageplaza\Smtp\Observer\Quote\DeleteQuote;
+use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\LoggerInterface;
 
-/**
- * Class DeleteQuoteTest
- * @package Mageplaza\Smtp\Test\Unit\Observer\Quote
- */
+#[CoversClass(DeleteQuote::class)]
 class DeleteQuoteTest extends TestCase
 {
-    /**
-     * @var EmailMarketing|MockObject
-     */
-    private EmailMarketing|MockObject $helperMock;
-
-    /**
-     * @var LoggerInterface|MockObject
-     */
-    private LoggerInterface|MockObject $loggerMock;
-
-    /**
-     * @var DeleteQuote
-     */
+    private EmailMarketing&MockObject $helperMock;
+    private LoggerInterface&MockObject $loggerMock;
     private DeleteQuote $observer;
 
-    /**
-     * @inheritdoc
-     */
     protected function setUp(): void
     {
         $this->helperMock = $this->createMock(EmailMarketing::class);
@@ -63,23 +48,17 @@ class DeleteQuoteTest extends TestCase
         $this->observer = new DeleteQuote($this->helperMock, $this->loggerMock);
     }
 
-    /**
-     * @param DataObject $quote
-     *
-     * @return Observer|MockObject
-     */
-    private function observerWithQuote(DataObject $quote): Observer
+    // getDataObject() is magic on Event (Magic Method Registry) — a real Event
+    // instance exercises the real __call->getData path instead of mocking it.
+    private function observerWithQuote(DataObject $quote): Observer&MockObject
     {
-        $event    = new Event(['data_object' => $quote]);
+        $event = new Event(['data_object' => $quote]);
         $observer = $this->createMock(Observer::class);
         $observer->method('getEvent')->willReturn($event);
 
         return $observer;
     }
 
-    /**
-     * Enable the email-marketing gate.
-     */
     private function enableGate(): void
     {
         $this->helperMock->method('isEnableEmailMarketing')->willReturn(true);
@@ -87,10 +66,8 @@ class DeleteQuoteTest extends TestCase
         $this->helperMock->method('getAppID')->willReturn('app');
     }
 
-    /**
-     * With the feature off, no delete request is issued.
-     */
-    public function testExecuteSkipsWhenDisabled(): void
+
+    public function testExecuteSkipsWhenEmailMarketingDisabled(): void
     {
         $this->helperMock->method('isEnableEmailMarketing')->willReturn(false);
         $this->helperMock->expects($this->never())->method('deleteQuote');
@@ -98,10 +75,26 @@ class DeleteQuoteTest extends TestCase
         $this->observer->execute($this->observerWithQuote(new DataObject(['id' => 10])));
     }
 
-    /**
-     * A persisted quote triggers a delete request with its id and store id.
-     */
-    public function testExecuteDeletesQuote(): void
+    public function testExecuteSkipsWhenSecretKeyMissing(): void
+    {
+        $this->helperMock->method('isEnableEmailMarketing')->willReturn(true);
+        $this->helperMock->method('getSecretKey')->willReturn('');
+        $this->helperMock->expects($this->never())->method('deleteQuote');
+
+        $this->observer->execute($this->observerWithQuote(new DataObject(['id' => 10])));
+    }
+
+    public function testExecuteSkipsWhenAppIdMissing(): void
+    {
+        $this->helperMock->method('isEnableEmailMarketing')->willReturn(true);
+        $this->helperMock->method('getSecretKey')->willReturn('secret');
+        $this->helperMock->method('getAppID')->willReturn('');
+        $this->helperMock->expects($this->never())->method('deleteQuote');
+
+        $this->observer->execute($this->observerWithQuote(new DataObject(['id' => 10])));
+    }
+
+    public function testExecuteDeletesQuoteWhenGateOpenAndQuoteHasId(): void
     {
         $this->enableGate();
         $quote = new DataObject(['id' => 10, 'store_id' => 2]);
@@ -113,9 +106,6 @@ class DeleteQuoteTest extends TestCase
         $this->observer->execute($this->observerWithQuote($quote));
     }
 
-    /**
-     * A quote that was never saved (no id) is ignored.
-     */
     public function testExecuteIgnoresQuoteWithoutId(): void
     {
         $this->enableGate();
@@ -124,16 +114,13 @@ class DeleteQuoteTest extends TestCase
         $this->observer->execute($this->observerWithQuote(new DataObject()));
     }
 
-    /**
-     * Any exception is caught and logged rather than bubbling up.
-     */
-    public function testExecuteLogsException(): void
+    public function testExecuteLogsExceptionInsteadOfBubbling(): void
     {
         $this->enableGate();
         $quote = new DataObject(['id' => 10, 'store_id' => 2]);
 
         $this->helperMock->method('deleteQuote')
-            ->willThrowException(new \Exception('boom'));
+            ->willThrowException(new Exception('boom'));
         $this->loggerMock->expects($this->once())->method('critical')->with('boom');
 
         $this->observer->execute($this->observerWithQuote($quote));

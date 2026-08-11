@@ -259,3 +259,10 @@ Office365 now requires OAuth2. Host/port will auto-force OAuth2 in the Authentic
 Port automatically set to 587 for TLS protocol.,Port automatically set to 587 for TLS protocol.
 Scope,Scope
 Tenant ID,Tenant ID
+OAuth2 is only available when Host is set to smtp.office365.com,OAuth2 is only available when Host is set to smtp.office365.com
+Tenant ID (Directory ID),Tenant ID (Directory ID)
+"From Azure AD App Registration > Overview.","From Azure AD App Registration > Overview."
+Client ID (Application ID),Client ID (Application ID)
+Azure AD App Registration client/application ID.,Azure AD App Registration client/application ID.
+Store the client secret from Azure AD.,Store the client secret from Azure AD.
+"Create API key <a href=""https://app.avada.io/integration"" target=""_blank"">here</a>.","Create API key <a href=""https://app.avada.io/integration"" target=""_blank"">here</a>."

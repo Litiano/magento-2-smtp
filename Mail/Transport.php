@@ -39,9 +39,12 @@ use ReflectionClass;
 use Symfony\Component\Mailer\Mailer;
 use Symfony\Component\Mime\Address;
 use Symfony\Component\Mime\Email;
+use Symfony\Component\Mime\Header\ParameterizedHeader;
+use Symfony\Component\Mime\Part\AbstractMultipartPart;
+use Symfony\Component\Mime\Part\AbstractPart;
 use Symfony\Component\Mime\Part\DataPart;
-use Symfony\Component\Mime\Part\Multipart\MixedPart;
 use Symfony\Component\Mime\Part\TextPart;
+use Symfony\Component\Mime\RawMessage;
 use Zend_Exception;
 
 /**
@@ -146,13 +149,9 @@ class Transport
                     } else {
                         // Use SMTP transport (existing logic)
                         if ($this->helper->versionCompare('2.4.8')) {
-                            if (!$message instanceof Email) {
-                                $message = $this->convertToSymfonyEmail($message);
-                            }
-
                             $transport = $this->resourceMail->getSymfonyTransport($this->_storeId);
                             $mailer    = new Mailer($transport);
-                            $mailer->send($message);
+                            $mailer->send($this->resolveSymfonyMessage($message));
                         } else {
                             if ($this->helper->versionCompare('2.2.8')) {
                                 $message = Message::fromString($message->getRawMessage())->setEncoding('utf-8');
@@ -179,9 +178,9 @@ class Transport
                 }
 
                 $this->emailLog($message);
-            } catch (Exception $e) {
+            } catch (\Throwable $e) {
                 $this->emailLog($message, false);
-                throw new MailException(new Phrase($e->getMessage()), $e);
+                throw new MailException(new Phrase($e->getMessage()), $e instanceof Exception ? $e : null);
             }
         }
     }
@@ -193,7 +192,14 @@ class Transport
      */
     protected function convertToSymfonyEmail($laminasMessage)
     {
-        $email = new Email();
+        $headers = ($laminasMessage !== null && method_exists($laminasMessage, 'getSymfonyMessage'))
+            ? clone $laminasMessage->getSymfonyMessage()->getHeaders()
+            : null;
+        $email = $headers ? new Email($headers) : new Email();
+
+        if ($laminasMessage === null) {
+            return $email->text('No readable content.');
+        }
 
         $fromList = $laminasMessage->getFrom();
         if (is_array($fromList) && count($fromList)) {
@@ -211,55 +217,119 @@ class Transport
         }
 
         $email->subject((string) $laminasMessage->getSubject());
-        $body = $laminasMessage->getBody();
-        if ($body instanceof TextPart) {
-            $mediaSubtype = $body->getMediaSubtype();
-            $content      = $body->getBody();
 
-            if ($mediaSubtype === 'html') {
-                $email->html($content);
-            } else {
-                $email->text($content);
-            }
-        } elseif ($body instanceof MixedPart) {
-            foreach ($body->getParts() as $part) {
-                if ($part instanceof TextPart) {
-                    $mediaSubtype = $part->getMediaSubtype();
-                    $content      = $part->getBody();
+        try {
+            $body = $laminasMessage->getBody();
+        } catch (\Throwable $e) {
+            $body = null;
+        }
 
-                    if ($mediaSubtype === 'html') {
-                        $email->html($content);
-                    } else {
-                        $email->text($content);
-                    }
+        $textParts   = [];
+        $attachments = [];
+        if ($body instanceof AbstractPart) {
+            $this->collectBodyParts($body, $textParts, $attachments);
+        }
+
+        if ($textParts || $attachments) {
+            foreach ($textParts as $subtype => $part) {
+                try {
+                    $contentType = $part->getPreparedHeaders()->get('Content-Type');
+                    $charset     = ($contentType instanceof ParameterizedHeader
+                        ? $contentType->getParameter('charset')
+                        : null) ?: 'utf-8';
+                } catch (\Throwable $e) {
+                    $charset = 'utf-8';
                 }
-                if ($part instanceof DataPart) {
-                    $email->addPart($part);
+
+                if ($subtype === 'html') {
+                    $email->html($part->getBody(), $charset);
+                } else {
+                    $email->text($part->getBody(), $charset);
                 }
             }
+
+            foreach ($attachments as $attachment) {
+                if ($attachment instanceof DataPart) {
+                    $dataPart = $attachment;
+                } else {
+                    $dataPart = new DataPart(
+                        $attachment->getBody(),
+                        null,
+                        $attachment->getMediaType() . '/' . $attachment->getMediaSubtype()
+                    );
+                }
+                $email->addPart(clone $dataPart);
+            }
+        } elseif ($body instanceof AbstractPart) {
+            $email->setBody($body);
         } else {
             $email->text('No readable content.');
         }
 
         if ($laminasMessage->getCc()) {
+            $ccAddresses = [];
             foreach ($laminasMessage->getCc() as $ccAddress) {
-                $email->addCc(new Address($ccAddress->getEmail(), $ccAddress->getName()));
+                $ccAddresses[] = new Address($ccAddress->getEmail(), $ccAddress->getName());
             }
+            $email->cc(...$ccAddresses);
         }
 
         if ($laminasMessage->getBcc()) {
+            $bccAddresses = [];
             foreach ($laminasMessage->getBcc() as $bccAddress) {
-                $email->addBcc(new Address($bccAddress->getEmail(), $bccAddress->getName()));
+                $bccAddresses[] = new Address($bccAddress->getEmail(), $bccAddress->getName());
             }
+            $email->bcc(...$bccAddresses);
         }
 
         if ($laminasMessage->getReplyTo()) {
+            $replyToAddresses = [];
             foreach ($laminasMessage->getReplyTo() as $replyTo) {
-                $email->replyTo(new Address($replyTo->getEmail(), $replyTo->getName()));
+                $replyToAddresses[] = new Address($replyTo->getEmail(), $replyTo->getName());
             }
+            $email->replyTo(...$replyToAddresses);
         }
 
         return $email;
+    }
+
+    /**
+     * @param $part
+     * @param $textParts
+     * @param $attachments
+     */
+    protected function collectBodyParts($part, &$textParts, &$attachments)
+    {
+        if ($part instanceof DataPart) {
+            if (!in_array($part, $attachments, true)) {
+                $attachments[] = $part;
+            }
+
+            return;
+        }
+
+        if ($part instanceof TextPart) {
+            $subtype = $part->getMediaSubtype();
+            if ($subtype === 'html' || $subtype === 'plain') {
+                if (!isset($textParts[$subtype])) {
+                    $textParts[$subtype] = $part;
+                }
+
+                return;
+            }
+
+            if (!in_array($part, $attachments, true)) {
+                $attachments[] = $part;
+            }
+
+            return;
+        }
+
+        if ($part instanceof AbstractMultipartPart) {
+            foreach ($part->getParts() as $childPart) {
+                $this->collectBodyParts($childPart, $textParts, $attachments);
+            }
+        }
     }
 
     /**
@@ -285,6 +355,24 @@ class Transport
         $message->setAccessible(true);
 
         return $message->getValue($transport);
+    }
+
+    /**
+     * @param $message
+     *
+     * @return RawMessage
+     */
+    protected function resolveSymfonyMessage($message)
+    {
+        if ($message instanceof RawMessage) {
+            return $message;
+        }
+
+        if ($message !== null && method_exists($message, 'getSymfonyMessage')) {
+            return $message->getSymfonyMessage();
+        }
+
+        return $this->convertToSymfonyEmail($message);
     }
 
     /**
@@ -349,7 +437,7 @@ class Transport
             $log = $this->logFactory->create();
             try {
                 if ($this->helper->versionCompare('2.4.8')) {
-                    if ($this->resourceMail->isDeveloperMode($this->_storeId)) {
+                    if (!$message instanceof Email) {
                         $message = $this->convertToSymfonyEmail($message);
                     }
 

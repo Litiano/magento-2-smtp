@@ -266,3 +266,8 @@ Client ID (Application ID),Client ID (Application ID)
 Azure AD App Registration client/application ID.,Azure AD App Registration client/application ID.
 Store the client secret from Azure AD.,Store the client secret from Azure AD.
 "Create API key <a href=""https://app.avada.io/integration"" target=""_blank"">here</a>.","Create API key <a href=""https://app.avada.io/integration"" target=""_blank"">here</a>."
+Load,Load
+Product not found,Product not found
+Requested store is not found,Requested store is not found
+not found,not found
+resolve failed,resolve failed

@@ -417,7 +417,7 @@ class TransportTest extends TestCase
             new MixedPart(new TextPart('plain'), new DataPart($payload, 'blob.pdf', 'application/pdf'))
         );
 
-        $this->assertSame(md5($payload), md5($email->getAttachments()[0]->getBody()));
+        $this->assertSame(hash('sha256', $payload), hash('sha256', $email->getAttachments()[0]->getBody()));
     }
 
     public function testConvertUtf8BodyIsByteIdentical(): void

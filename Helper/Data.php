@@ -254,7 +254,7 @@ class Data extends AbstractData
             );
         }
 
-        $cacheKey = self::OAUTH_CACHE_KEY_PREFIX . $storeId . '_' . md5($tenantId . $clientId . $scope);
+        $cacheKey = self::OAUTH_CACHE_KEY_PREFIX . $storeId . '_' . hash('sha256', $tenantId . $clientId . $scope);
         if ($token = $this->cache->load($cacheKey)) {
             return $token;
         }

@@ -297,12 +297,16 @@ class Mail
      */
     public function getSymfonyTransport($storeId)
     {
-        $config   = $this->smtpHelper->getSmtpConfig('', $storeId);
-        $host     = $config['host'] ?? 'localhost';
-        $port     = (int) ($config['port'] ?? 25);
-        $protocol = $config['protocol'] ?? null; // tls | ssl | null
-        $username = $config['username'] ?? null;
-        $password = $this->smtpHelper->getPassword($storeId);
+        $override = $this->_smtpOptions[$storeId] ?? [];
+        $config   = $this->smtpHelper->getSmtpConfig('', $storeId) ?: [];
+
+        $host     = $override['host'] ?? ($config['host'] ?? 'localhost');
+        $port     = (int) ($override['port'] ?? ($config['port'] ?? 25));
+        $protocol = $override['ssl'] ?? ($config['protocol'] ?? null); // tls | ssl | null
+        $username = $override['username'] ?? ($config['username'] ?? null);
+        $password = array_key_exists('password', $override)
+            ? $override['password']
+            : $this->smtpHelper->getPassword($storeId);
 
         // CRITICAL: Strip ssl:// or tls:// prefix from host - Symfony adds it automatically
         $host = preg_replace('#^(ssl|tls)://#i', '', $host);

@@ -31,6 +31,9 @@
                 <log_email>1</log_email>
                 <clean_email>10</clean_email>
             </general>
+            <configuration_option>
+                <username_type>email</username_type>
+            </configuration_option>
         </smtp>
         <email_marketing>
             <general>

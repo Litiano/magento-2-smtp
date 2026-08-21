@@ -201,6 +201,10 @@ Host,Host
 "Default ports: 25, 465, or 587. Port 465 (SSL required), Port 587 (TLS required)","Default ports: 25, 465, or 587. Port 465 (SSL required), Port 587 (TLS required)"
 "We recommend use security connections: SSL or TLS. Secure Socket Layer (SSL), Transport Layer Security (TLS) protocols.","We recommend use security connections: SSL or TLS. Secure Socket Layer (SSL), Transport Layer Security (TLS) protocols."
 Authentication,Authentication
+"Username Type","Username Type"
+"Email Address","Email Address"
+"API Key","API Key"
+"Choose API Key when the provider does not use an email address as username.","Choose API Key when the provider does not use an email address as username."
 Username,Username
 Password,Password
 "Return-Path Email","Return-Path Email"

@@ -81,6 +81,11 @@
                     <comment>OAuth2 is only available when Host is set to smtp.office365.com</comment>
                     <validate>required-entry</validate>
                 </field>
+                <field id="username_type" translate="label comment" type="select" sortOrder="55" showInDefault="1" showInWebsite="1" showInStore="1">
+                    <label>Username Type</label>
+                    <source_model>Mageplaza\Smtp\Model\Config\Source\UsernameType</source_model>
+                    <comment>Choose API Key when the provider does not use an email address as username.</comment>
+                </field>
                 <field id="username" translate="label" type="text" sortOrder="60" showInDefault="1" showInWebsite="1" showInStore="1">
                     <label>Username</label>
                     <validate>validate-email</validate>

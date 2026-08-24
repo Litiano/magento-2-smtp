@@ -119,8 +119,15 @@ class Test extends Action
 
         $params = $this->getRequest()->getParams();
         if ($params && $params['to']) {
-            $storeId = $params['store'] ?? Store::DEFAULT_STORE_ID;
-            $config  = [
+            $storeId = $params['store'] ?? null;
+            if ($storeId === null && !empty($params['website'])) {
+                $storeId = $this->smtpDataHelper->getScopeId();
+            }
+            if ($storeId === null) {
+                $storeId = Store::DEFAULT_STORE_ID;
+            }
+
+            $config = [
                 'type'           => 'smtp',
                 'host'           => $params['host'],
                 'auth'           => $params['authentication'],

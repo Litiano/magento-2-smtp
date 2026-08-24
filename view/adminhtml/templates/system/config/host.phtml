@@ -208,6 +208,8 @@
             authEl       = $('#smtp_configuration_option_authentication'),
             authName     = authEl.attr('name'),
             authHiddenId = authEl.attr('id') + '_force',
+            usernameEl   = $('#smtp_configuration_option_username'),
+            userTypeEl   = $('#smtp_configuration_option_username_type'),
             oauthFields  = [
                 '#row_smtp_configuration_option_oauth_tenant_id',
                 '#row_smtp_configuration_option_oauth_client_id',
@@ -215,6 +217,7 @@
                 '#row_smtp_configuration_option_oauth_help'
             ],
             basicFields  = [
+                '#row_smtp_configuration_option_username_type',
                 '#row_smtp_configuration_option_username',
                 '#row_smtp_configuration_option_password'
             ];
@@ -281,13 +284,23 @@
             }
         }
 
+        function syncUsernameValidation (isOauth) {
+            var isApiKey = userTypeEl.val() === 'api_key';
+
+            usernameEl
+            .toggleClass('validate-email', !isOauth && !isApiKey)
+            .toggleClass('required-entry', !isOauth && isApiKey);
+        }
+
         function syncState () {
             var isOffice365 = isOffice365Host(hostEl.val());
             toggleOauth(isOffice365);
             disableOAuth2Option(!isOffice365);
+            syncUsernameValidation(isOffice365);
         }
 
         hostEl.on('change keyup', syncState);
+        userTypeEl.on('change', syncState);
 
         $('.button-actions-apply-autofill').on('click', function () {
             var hostVal     = $(this).data('host'),
